@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import crypto from 'crypto';
 import { createLeaveClient, createLeaveServiceClient } from '@/lib/leaveSupabase/server';
 import { getFYStartYear } from '@/lib/leaveSupabase/fyHelpers';
 import { sendLeaveReminder } from '@/lib/leaveSupabase/notifyLeaveEvent';
@@ -258,8 +259,18 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ job:
   }
 
   const cronSecret = process.env.CRON_SECRET;
-  const authHeader = req.headers.get('authorization');
-  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
+  const authHeader = req.headers.get('authorization') || '';
+  const expectedHeader = cronSecret ? `Bearer ${cronSecret}` : '';
+
+  const isAuthorized = (() => {
+    if (!cronSecret || !authHeader) return false;
+    const bufHeader = Buffer.from(authHeader);
+    const bufExpected = Buffer.from(expectedHeader);
+    if (bufHeader.length !== bufExpected.length) return false;
+    return crypto.timingSafeEqual(bufHeader, bufExpected);
+  })();
+
+  if (!isAuthorized) {
     return NextResponse.json({ error: 'Not authorized — this endpoint is for the scheduler only' }, { status: 401 });
   }
 

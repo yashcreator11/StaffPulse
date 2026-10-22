@@ -1,4 +1,4 @@
-﻿# SaaS Readiness To-Do List: BioMetric Dashboard
+# SaaS Readiness To-Do List: BioMetric Dashboard
 
 _Prepared from the repo review, 22 Oct 2026._
 _P0 = blocks selling to a second customer. P1 = needed before public launch. P2 = needed for scale. ✔ = confirmed in your code; other items are standard requirements for this type of product._
@@ -18,21 +18,24 @@ _P0 = blocks selling to a second customer. P1 = needed before public launch. P2 
 
 ## A. Security and Data Protection (P0)
 
-- [ ] ✔ Replace the blanket "authenticated read/write" RLS policy on all tables with role- and row-based policies
-- [ ] ✔ Block role self-escalation: only HR admins may change `employees.role`, enforced in the database
-- [ ] ✔ Remove the `shared_links` `public select using (true)` policy
-- [ ] ✔ Require an HR session on `POST /api/shared-link`; add payload size limit and rate limit
-- [ ] ✔ Add authorization and a batch limit to `/api/dashboard/leave-lookup-batch`; stop returning leave reasons to unauthorized roles
+- [x] ✔ Replace the blanket "authenticated read/write" RLS policy on all tables with role- and row-based policies
+- [x] ✔ Block role self-escalation: only HR admins may change `employees.role`, enforced in the database
+- [x] ✔ Remove the `shared_links` `public select using (true)` policy
+- [x] ✔ Require an HR session on `POST /api/shared-link`; add payload size limit and rate limit
+- [x] ✔ Add authorization and a batch limit to `/api/dashboard/leave-lookup-batch`; stop returning leave reasons to unauthorized roles
 - [ ] ✔ Audit all 37 files using the service-role client; each must verify the caller and scope queries to their organization
-- [ ] ✔ Replace `xlsx@0.18.5` (high-severity advisories, no npm fix); re-run `npm audit` and clear the remaining 8 findings
-- [ ] ✔ Use timing-safe comparison for `CRON_SECRET` and add it to `.env.example`
+- [x] ✔ Replace `xlsx@0.18.5` (high-severity advisories, no npm fix); re-run `npm audit` and clear the remaining 8 findings
+- [x] ✔ Use timing-safe comparison for `CRON_SECRET` and add it to `.env.example`
 - [ ] Rate limiting on login, upload and API routes
-- [ ] Security headers (CSP, HSTS, frame options)
+- [x] Security headers (CSP, HSTS, frame options)
 - [ ] File upload validation: size limit, type check, malicious-spreadsheet handling
-- [ ] Expiry cleanup for shared links; let admins revoke them
+- [x] Expiry cleanup for shared links; let admins revoke them
 - [ ] Secret scanning and dependency scanning in CI
 - [ ] Independent penetration test before enterprise sales (P1)
 - [ ] Revoke the GitHub token that was pasted in chat, and never commit tokens
+- [x] (added) Fix the open redirect in the OAuth callback: accept only paths starting with a single slash in the next parameter
+- [x] (added) Retire name-based account linking in the OAuth callback; require a verified email on the employee row
+- [x] (added) Employees log in on every plan, so “employees see only their own data” must be enforced in row-level security before any employee is onboarded
 
 ---
 

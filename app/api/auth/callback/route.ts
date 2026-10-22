@@ -5,26 +5,20 @@ import {
   type EmployeeRole,
 } from '@/lib/leaveSupabase/getCurrentEmployee';
 
-// GET /api/auth/callback — Supabase Google OAuth redirects here with a
-// `?code=...` after the person approves on Google's consent screen.
+// GET /api/auth/callback — Supabase Google OAuth callback.
 //
-// Login rules:
-//   1. Existing employee matched by email
+// Login security rules:
+//   1. Existing employee matched strictly by verified email in employees table
 //      -> link Google account and login directly.
 //
-//   2. Existing employee whose email is not populated in employees,
-//      but whose full_name matches firstname.lastname@wonderbiz.in
-//      -> link Google account and login directly.
+//   2. Name-based account linking is RETIRED:
+//      Requiring verified email match prevents spoofing and account collision.
 //
-//   3. @wonderbiz.in account with no matching employee
+//   3. @company email with no matching employee
 //      -> create/refresh pending_employee_signups and send to /leave/pending.
 //
-//   4. Non-company email
-//      -> only allowed for an explicitly configured HR/HR Super Admin account.
-//
-// Existing employees do NOT need acknowledgement/onboarding just because
-// profile_confirmed_at is NULL. If the employee record already exists,
-// Google sign-in is treated as a normal login.
+//   4. Open redirect protection:
+//      Enforces relative URLs starting with exactly one '/' in the 'next' parameter.
 
 const COMPANY_EMAIL_DOMAIN = (
   process.env.COMPANY_EMAIL_DOMAIN || 'wonderbiz.in'
@@ -34,6 +28,16 @@ function errorRedirect(origin: string, code: string) {
   const url = new URL('/login', origin);
   url.searchParams.set('error', code);
   return NextResponse.redirect(url);
+}
+
+function sanitizeRedirectPath(path: string | null): string | null {
+  if (!path) return null;
+  const trimmed = path.trim();
+  // Must start with exactly one '/' and not contain protocol or double slashes
+  if (trimmed.startsWith('/') && !trimmed.startsWith('//') && !trimmed.startsWith('/\\')) {
+    return trimmed;
+  }
+  return null;
 }
 
 export async function GET(req: NextRequest) {
@@ -57,7 +61,6 @@ export async function GET(req: NextRequest) {
   }
 
   const user = sessionData.user;
-
   const email = (user.email || '').trim().toLowerCase();
 
   const googleId =
@@ -78,15 +81,13 @@ export async function GET(req: NextRequest) {
   const domain = email.split('@')[1] || '';
   const isCompanyDomain = domain === COMPANY_EMAIL_DOMAIN;
 
-  // Service client is intentionally used here because this route needs
-  // to identify/link employee records independently of normal client RLS.
   const service = createServiceClient();
 
   // -------------------------------------------------------------------------
-  // STEP 1: Try exact email match
+  // STEP 1: Strict email matching only (name-based linking retired)
   // -------------------------------------------------------------------------
 
-  let { data: employee, error: lookupError } = await service
+  const { data: employee, error: lookupError } = await service
     .from('employees')
     .select(
       'id, full_name, email, role, auth_user_id, google_id, profile_confirmed_at, must_change_password'
@@ -100,74 +101,7 @@ export async function GET(req: NextRequest) {
   }
 
   // -------------------------------------------------------------------------
-  // STEP 2: Fallback for existing company employees whose email is NULL
-  //
-  // Example:
-  //
-  //   Google email:
-  //     sakshi.gangurde@wonderbiz.in
-  //
-  //   Derived name:
-  //     Sakshi Gangurde
-  //
-  //   employees.full_name:
-  //     Sakshi Gangurde
-  //
-  // If exactly one employee matches, that existing employee is used.
-  // -------------------------------------------------------------------------
-
-  if (!employee && isCompanyDomain) {
-    const localPart = email.split('@')[0];
-
-    const nameParts = localPart
-      .split('.')
-      .map((part) => part.trim())
-      .filter(Boolean);
-
-    if (nameParts.length >= 2) {
-      const firstName = nameParts[0];
-
-      // Everything after the first dot is treated as the last-name portion.
-      //
-      // This also supports:
-      //   sai.kumar.sharma@wonderbiz.in
-      //
-      // -> Sai Kumar Sharma
-      const lastName = nameParts.slice(1).join(' ');
-
-      const derivedFullName = `${firstName} ${lastName}`
-        .replace(/\s+/g, ' ')
-        .trim();
-
-      const {
-        data: nameMatches,
-        error: nameLookupError,
-      } = await service
-        .from('employees')
-        .select(
-          'id, full_name, email, role, auth_user_id, google_id, profile_confirmed_at, must_change_password'
-        )
-        .ilike('full_name', derivedFullName)
-        .limit(2);
-
-      if (nameLookupError) {
-        await supabase.auth.signOut();
-        return errorRedirect(origin, 'oauth_lookup_failed');
-      }
-
-      // Only automatically link when the name uniquely identifies
-      // one employee. Never guess if duplicate names exist.
-      if (nameMatches?.length === 1) {
-        employee = nameMatches[0];
-      }
-    }
-  }
-
-  // -------------------------------------------------------------------------
-  // STEP 3: No existing employee found
-  //
-  // Only genuinely new @wonderbiz.in users reach this section.
-  // They remain in the HR acknowledgement/setup flow.
+  // STEP 2: No existing employee found
   // -------------------------------------------------------------------------
 
   if (!employee) {
@@ -200,13 +134,11 @@ export async function GET(req: NextRequest) {
       return errorRedirect(origin, 'oauth_lookup_failed');
     }
 
-    return NextResponse.redirect(
-      new URL('/leave/pending', origin)
-    );
+    return NextResponse.redirect(new URL('/leave/pending', origin));
   }
 
   // -------------------------------------------------------------------------
-  // STEP 4: Existing employee found
+  // STEP 3: Existing employee found
   // -------------------------------------------------------------------------
 
   const isAdminRole =
@@ -229,29 +161,18 @@ export async function GET(req: NextRequest) {
   }
 
   // -------------------------------------------------------------------------
-  // STEP 5: Link/update the existing employee
+  // STEP 4: Link/update the existing employee
   // -------------------------------------------------------------------------
 
   const nowIso = new Date().toISOString();
 
   const update: Record<string, unknown> = {
-    // Important: because we successfully matched the existing employee
-    // through their company email/name, populate the email now.
     email,
-
     last_login_at: nowIso,
     updated_at: nowIso,
-
-    // Existing employee = normal login.
-    // profile_confirmed_at must NOT block login.
-    //
-    // We mark the legacy confirmation gate as satisfied so older code
-    // cannot redirect an existing employee into onboarding.
-    profile_confirmed_at:
-      employee.profile_confirmed_at || nowIso,
+    profile_confirmed_at: employee.profile_confirmed_at || nowIso,
   };
 
-  // First Google login for this employee.
   if (!employee.auth_user_id) {
     update.auth_user_id = user.id;
     update.auth_provider = 'google';
@@ -276,10 +197,7 @@ export async function GET(req: NextRequest) {
   }
 
   // -------------------------------------------------------------------------
-  // STEP 6: Remove stale pending signup
-  //
-  // This handles cases where the employee previously signed in before
-  // their employee record was created/imported.
+  // STEP 5: Remove stale pending signup
   // -------------------------------------------------------------------------
 
   await service
@@ -288,16 +206,13 @@ export async function GET(req: NextRequest) {
     .eq('auth_user_id', user.id);
 
   // -------------------------------------------------------------------------
-  // STEP 7: Existing employee -> DIRECT LOGIN
-  //
-  // There is deliberately NO acknowledgement/onboarding step here.
+  // STEP 6: Existing employee -> DIRECT LOGIN (Open-Redirect Protected)
   // -------------------------------------------------------------------------
 
+  const safeNext = sanitizeRedirectPath(next);
   const destination =
-    next ||
+    safeNext ||
     homeRouteForRole(employee.role as EmployeeRole);
 
-  return NextResponse.redirect(
-    new URL(destination, origin)
-  );
+  return NextResponse.redirect(new URL(destination, origin));
 }
