@@ -147,19 +147,20 @@ _P0 = blocks selling to a second customer. P1 = needed before public launch. P2 
 
 ## I. Reliability and Operations (P0/P1)
 
-- [ ] ✔ Fix or remove the Dockerfile: add `output: standalone` to `next.config.ts`, create or remove the `public/` copy, add `/api/health`
+- [x] ✔ Fix or remove the Dockerfile: add `output: standalone` to `next.config.ts`, create or remove the `public/` copy, add `/api/health`
 - [ ] Decide and document the hosting strategy (Vercel plus Supabase is fine to start)
 - [ ] Separate staging and production environments
-- [ ] CI on every pull request: lint, type-check, tests, build, audit
-- [ ] Tests: unit tests for leave and attendance math, API authorization tests, end-to-end tests for core flows
+- [x] CI on every pull request: lint, type-check, tests, build, audit
+- [x] Tests: unit tests for leave and attendance math, API authorization tests, end-to-end tests for core flows
 - [ ] Error tracking (Sentry), uptime monitoring and a public status page
 - [ ] Structured logging with no personal data in logs
 - [ ] Database backups with a tested restore; point-in-time recovery enabled
 - [ ] Migration discipline: ordered, reversible where possible, tested on production-sized data
-- [ ] ✔ Add the missing files referenced in `.env.example` (`unified_schema.sql`, `lib/googleWorkspace.ts`) or remove the references
+- [x] ✔ Add the missing files referenced in `.env.example` (`unified_schema.sql`, `lib/googleWorkspace.ts`) or remove the references
 - [ ] Background job queue for heavy work (imports, bulk emails, reports), not only cron
 - [ ] Performance: pagination, indexes, remove N+1 query patterns (e.g. `leave-lookup-batch`)
 - [ ] Load test at target size (e.g. 5,000 employees and 12 months of punches per org), including dashboard load-time targets
+- [ ] (added) Spending alerts on Supabase and Vercel; backups in place before the first pilot holds real data
 
 ---
 

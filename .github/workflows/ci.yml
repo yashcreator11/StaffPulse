@@ -1,0 +1,44 @@
+name: CI Quality Gate
+
+on:
+  push:
+    branches: [main, sec-*]
+  pull_request:
+    branches: [main]
+
+jobs:
+  quality-gate:
+    name: Lint, Typecheck, Test, Build & Security Audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run ESLint
+        run: npm run lint
+
+      - name: Run TypeScript Typecheck
+        run: npx tsc --noEmit
+
+      - name: Run Automated Unit Tests
+        run: npm test
+
+      - name: Build Production Application
+        run: npm run build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co' }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-anon-key' }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY || 'placeholder-service-key' }}
+
+      - name: Critical Security Audit
+        run: npm audit --audit-level=critical
