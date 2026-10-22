@@ -1,0 +1,135 @@
+import { cache } from 'react';
+import { createLeaveClient } from '@/lib/leaveSupabase/server';
+
+export type EmployeeRole = 'employee' | 'lead' | 'manager' | 'hr' | 'hr_super_admin';
+
+export interface CurrentEmployee {
+  id: string;
+  full_name: string;
+  employee_code: string;
+  email: string;
+  role: EmployeeRole;
+  department: string;
+  office: string;
+  reporting_lead_id: string | null;
+  reporting_manager_id: string | null;
+  must_change_password: boolean;
+  // Sprint — Google OAuth (see app/api/auth/callback/route.ts /
+  // 0016_google_oauth_and_directory.sql). null until the person has been
+  // through the post-login onboarding confirmation screen once.
+  profile_confirmed_at: string | null;
+  avatar_url: string | null;
+  auth_provider: 'password' | 'google';
+}
+
+// Sprint A — role-aware auth.
+//
+// Every route guard under app/leave/** should call this instead of just
+// checking `supabase.auth.getUser()`. It answers two questions in one
+// round trip: "is there a session?" and "which employees row (and
+// therefore which role) does it map to?".
+//
+// Returns null in two distinct cases that callers should treat the same
+// way (redirect to /leave/login): no session at all, OR a session whose
+// auth_user_id has no matching employees row yet (e.g. an account was
+// created in Supabase Auth directly, bypassing the admin invite flow in
+// app/api/leave/admin/employees/[id]/invite/route.ts, so it was never
+// linked). We deliberately do not distinguish these to the caller — both
+// are "not a recognized employee session" from the app's point of view.
+//
+// NOTE — this only gates page routing. The `employees` table's RLS policy
+// is still the wide-open "authenticated read/write" policy from
+// 001_leave_management_schema.sql (see schema.sql:713) — i.e. any
+// authenticated Supabase user can already read/write any row via a direct
+// client call, regardless of what this function decides. That RLS
+// tightening is real, separate work (flagged for Sprint C/G, since it
+// mainly matters once the approval endpoints exist) — do not treat page
+// guards built on top of this helper as a data-access boundary yet.
+// PERF FIX: wrapped in React's cache(). Every /leave/** layout AND the
+// page.tsx rendered inside it (plus, on several routes, one or more nested
+// data calls) each called this independently — every call re-runs a real
+// network round trip to Supabase's Auth server (auth.getUser() validates
+// the token remotely, it isn't a local cookie decode) PLUS a fresh
+// `employees` table read. That's why a single page view could cost 2-3+
+// of those round trips back to back, and why it repeated in full on every
+// tab switch (each /leave/** tab is a different route segment with its
+// own layout.tsx). cache() memoizes the resolved employee for the
+// lifetime of one request, so the layout's call and the page's call
+// (and anything else in the same render) share one lookup. This resets
+// on every new request/navigation, so a change made via the onboarding
+// or password-change flow is always picked up fresh on the next request.
+export const getCurrentEmployee = cache(async function getCurrentEmployee(): Promise<CurrentEmployee | null> {
+  const supabase = await createLeaveClient();
+  const { data: claimsData } = await supabase.auth.getClaims();
+  const userId = claimsData?.claims?.sub;
+
+  if (!userId) return null;
+
+  const { data: employee, error } = await supabase
+    .from('employees')
+    .select(
+      'id, full_name, employee_code, email, role, department, office, reporting_lead_id, reporting_manager_id, must_change_password, profile_confirmed_at, avatar_url, auth_provider'
+    )
+    .eq('auth_user_id', userId)
+    .maybeSingle();
+
+  if (error || !employee) return null;
+
+  return employee as CurrentEmployee;
+});
+
+// Where each role lands right after login / when they hit a route their
+// role doesn't own. Centralized here so the single /login page and every
+// layout guard agree on the same mapping instead of each hardcoding it.
+//
+// Single-login pivot: hr / hr_super_admin now land on the unified
+// Dashboard ('/') — that's the whole point of merging the two logins
+// (see middleware.ts's header comment and PROGRESS.md point 5). A
+// "Leave Tracker" button in the Dashboard header (app/DashboardClient.tsx)
+// gets them to '/leave/admin' from there for full read/write access.
+//
+// manager and lead both land on '/leave/me' first — their own leave data
+// — with an "Approve Team Leaves" button to '/leave/approvals' and a
+// "Team Dashboard" button to '/' (read-only, filtered to their team) from
+// there. Treated identically here per the confirmed decision that lead
+// should behave like a mini-manager, not a lesser role.
+export function homeRouteForRole(role: EmployeeRole): string {
+  switch (role) {
+    case 'hr':
+    case 'hr_super_admin':
+      return '/';
+    case 'manager':
+    case 'lead':
+    case 'employee':
+    default:
+      return '/leave/me';
+  }
+}
+
+// Simplified onboarding flow: a Google sign-in with no employees row yet
+// isn't necessarily a rejection anymore — app/api/auth/callback/route.ts
+// creates a pending_employee_signups row for it instead (see
+// 0017_pending_signups_and_probation.sql) and lets them in. Every
+// /leave/**/layout.tsx guard's `if (!employee) redirect(...)` branch
+// calls this first to tell "genuinely not authenticated / not
+// recognized at all" apart from "authenticated, Google-verified, just
+// waiting on HR" — the latter goes to the holding page
+// (app/leave/pending/page.tsx) instead of back to /login, so the person
+// isn't bounced in a loop after they already successfully signed in.
+// PERF FIX: cache()'d for the same reason as getCurrentEmployee above —
+// dedupes its auth.getUser() call against any other call to
+// createLeaveClient()'s underlying client within the same request.
+export const getPendingSignupRedirect = cache(async function getPendingSignupRedirect(): Promise<string | null> {
+  const supabase = await createLeaveClient();
+  const { data: claimsData } = await supabase.auth.getClaims();
+  const userId = claimsData?.claims?.sub;
+  if (!userId) return null;
+
+  const { data } = await supabase
+    .from('pending_employee_signups')
+    .select('id')
+    .eq('auth_user_id', userId)
+    .maybeSingle();
+
+  return data ? '/leave/pending' : null;
+});

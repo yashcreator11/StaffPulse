@@ -1,0 +1,392 @@
+﻿'use client';
+import { useState, useRef, useMemo, useEffect } from 'react';
+import { createPortal } from 'react-dom';
+import { Download, FileSpreadsheet, FileText, FileIcon, ChevronDown, Loader2, X, Calendar, Building2, Users } from 'lucide-react';
+import { UploadedMonth, Thresholds, Holiday, LeaveRecord, AttendanceRecord } from '@/lib/types';
+import { getRecords } from '@/lib/storage';
+import { getAllLeaveRecords } from '@/lib/leaveTrackerRead';
+import { getHolidays } from '@/lib/holidays';
+import { useDashboardData } from '@/lib/useDashboardData';
+import { exportExcel, exportCSV } from '@/lib/exportData';
+import { useEmployeeDirectorySync } from '@/lib/employeeStore';
+
+interface ExportPanelProps {
+  uploadedMonths: UploadedMonth[];
+  thresholds: Thresholds;
+  // When true, render only the compact icon-only trigger suitable for
+  // placement inside a collapsed sidebar. The full dialog still mounts
+  // so the trigger can open it.
+  compact?: boolean;
+  // Team Dashboard (manager/lead) passes their team's employee_codes here
+  // so every export — regardless of which months/office/departments they
+  // pick in the dialog — only ever contains their own team's rows, never
+  // the wider org. HR (no restriction passed) is unaffected.
+  restrictToEmployeeCodes?: string[];
+}
+
+const MONTH_NAMES = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+function periodKey(m: UploadedMonth): string {
+  return `${m.year}${m.month}`;
+}
+function periodLabel(key: string): string {
+  const year = key.slice(0, 4);
+  const month = key.slice(4, 6);
+  return `${MONTH_NAMES[parseInt(month, 10)] || month} ${year}`;
+}
+
+// FR-11D: dedicated multi-month export dialog — From-month / To-month /
+// Office / Department selectors spanning every uploaded month, rather than
+// just exporting whatever happens to be on screen right now.
+export default function ExportPanel({ uploadedMonths, thresholds, restrictToEmployeeCodes, compact }: ExportPanelProps) {
+  const directoryVersion = useEmployeeDirectorySync();
+  const [dialogOpen, setDialogOpen] = useState(false);
+  // The sidebar is `position: sticky`, which creates its own stacking
+  // context — a `fixed` + high-z-index dialog nested inside it can only
+  // out-rank *siblings within that context*, not the dashboard content
+  // outside it, so the overlay silently loses to the page behind it.
+  // Portaling straight to <body> sidesteps that entirely. `mounted` avoids
+  // an SSR/hydration mismatch since `document` doesn't exist on the server.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [loading, setLoading] = useState<'excel' | 'csv' | 'pdf' | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // ── Scope selectors ─────────────────────────────────────────────────────
+  const [fromPeriod, setFromPeriod] = useState('');
+  const [toPeriod, setToPeriod] = useState('');
+  const [office, setOffice] = useState('ALL');
+  const [selectedDepts, setSelectedDepts] = useState<string[]>([]);
+
+  const periods = useMemo(() => {
+    const set = new Set<string>();
+    uploadedMonths.forEach(m => set.add(periodKey(m)));
+    return Array.from(set).sort();
+  }, [uploadedMonths]);
+
+  const offices = useMemo(() => {
+    return Array.from(new Set(uploadedMonths.map(m => m.officeCode))).sort();
+  }, [uploadedMonths]);
+
+  // Open the dialog with sensible defaults: latest uploaded month, all offices.
+  function openDialog() {
+    const latest = periods[periods.length - 1] ?? '';
+    setFromPeriod(latest);
+    setToPeriod(latest);
+    setOffice('ALL');
+    setSelectedDepts([]);
+    setDialogOpen(true);
+  }
+
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+    }
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  // ── Months within the selected From→To period + office ──────────────────
+  const scopedMonths = useMemo(() => {
+    if (!fromPeriod || !toPeriod) return [];
+    const lo = fromPeriod <= toPeriod ? fromPeriod : toPeriod;
+    const hi = fromPeriod <= toPeriod ? toPeriod : fromPeriod;
+    return uploadedMonths.filter(m => {
+      const k = periodKey(m);
+      if (k < lo || k > hi) return false;
+      if (office !== 'ALL' && m.officeCode !== office) return false;
+      return true;
+    });
+  }, [uploadedMonths, fromPeriod, toPeriod, office]);
+
+  const [scopedRecords, setScopedRecords] = useState<AttendanceRecord[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all(scopedMonths.map(m => getRecords(m.key)))
+      .then(results => {
+        if (cancelled) return;
+        const flat = results.flat();
+        const restricted = restrictToEmployeeCodes
+          ? flat.filter(r => restrictToEmployeeCodes.includes(r.employeeCode))
+          : flat;
+        setScopedRecords(restricted);
+      });
+    return () => { cancelled = true; };
+  }, [scopedMonths, directoryVersion, restrictToEmployeeCodes]);
+
+  const departments = useMemo(() => {
+    return Array.from(new Set(scopedRecords.map(r => r.department))).filter(Boolean).sort();
+  }, [scopedRecords]);
+
+  // If the department list changes (different office/period picked) drop any
+  // previously-selected department that's no longer in scope.
+  useEffect(() => {
+    setSelectedDepts(prev => prev.filter(d => departments.includes(d)));
+  }, [departments]);
+
+  const filteredRecords = useMemo(() => {
+    if (selectedDepts.length === 0) return scopedRecords;
+    return scopedRecords.filter(r => selectedDepts.includes(r.department));
+  }, [scopedRecords, selectedDepts]);
+
+  const [holidays, setHolidays] = useState<Holiday[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const seen = new Set<string>();
+    const uniquePairs = scopedMonths.filter(m => {
+      const key = `${m.officeCode}_${m.year}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    Promise.all(uniquePairs.map(m => getHolidays(m.officeCode, m.year)))
+      .then(results => {
+        if (!cancelled) setHolidays(results.flat());
+      });
+
+    return () => { cancelled = true; };
+  }, [scopedMonths]);
+
+  const [leaveRecords, setLeaveRecords] = useState<LeaveRecord[]>([]);
+  const [leaveLoadError, setLeaveLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    getAllLeaveRecords(scopedMonths.map(m => m.key))
+      .then(records => {
+        if (cancelled) return;
+        const restricted = restrictToEmployeeCodes
+          ? records.filter(r => restrictToEmployeeCodes.includes(r.employeeCode))
+          : records;
+        setLeaveRecords(restricted);
+        setLeaveLoadError(null);
+      })
+      .catch((err) => {
+        if (!cancelled) setLeaveLoadError(`Could not load leave data from the Leave Tracker — exports may be missing leave columns: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      });
+    return () => { cancelled = true; };
+  }, [scopedMonths, restrictToEmployeeCodes]);
+
+  const { employeeSummaries } = useDashboardData(
+    filteredRecords, 'ALL', [], [], holidays, thresholds, leaveRecords
+  );
+
+  const label = useMemo(() => {
+    const officePart = office === 'ALL' ? 'AllOffices' : office;
+    const periodPart = fromPeriod === toPeriod ? periodLabel(fromPeriod).replace(/\s+/g, '')
+      : `${periodLabel(fromPeriod).replace(/\s+/g, '')}-${periodLabel(toPeriod).replace(/\s+/g, '')}`;
+    const deptPart = selectedDepts.length > 0 ? `_${selectedDepts.join('-').replace(/\s+/g, '')}` : '';
+    return `${officePart}_${periodPart}${deptPart}`;
+  }, [office, fromPeriod, toPeriod, selectedDepts]);
+
+  function toggleDept(d: string) {
+    setSelectedDepts(prev => prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d]);
+  }
+
+  const canExport = scopedMonths.length > 0 && filteredRecords.length > 0;
+
+  async function handleExcel() {
+    if (!canExport) return;
+    setLoading('excel');
+    await new Promise(r => setTimeout(r, 50));
+    exportExcel(filteredRecords, employeeSummaries, label, leaveRecords);
+    setLoading(null);
+  }
+
+  async function handleCSV() {
+    if (!canExport) return;
+    setLoading('csv');
+    await new Promise(r => setTimeout(r, 50));
+    exportCSV(filteredRecords, label, leaveRecords);
+    setLoading(null);
+  }
+
+  async function handlePDF() {
+    if (!canExport) return;
+    setLoading('pdf');
+    await new Promise(r => setTimeout(r, 50));
+    const { exportPDF } = await import('@/lib/exportPDF');
+    await exportPDF(filteredRecords, employeeSummaries, label, thresholds, holidays);
+    setLoading(null);
+  }
+
+  const disabled = uploadedMonths.length === 0;
+
+  // Dialog markup is identical whether the trigger is the compact icon
+  // (collapsed sidebar) or the full labelled button (expanded sidebar) —
+  // shared here so the two trigger variants below don't drift apart.
+  const dialog = mounted && dialogOpen ? createPortal(
+    (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => setDialogOpen(false)}>
+            <div
+              className="bg-[var(--bg-surface)] border border-[var(--border)] rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden max-h-[90vh] flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="px-5 py-4 border-b border-[var(--border)] flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-[var(--text-primary)] font-semibold text-sm">Export Data</h3>
+                  <p className="text-[var(--text-muted)] text-xs mt-1">
+                    {restrictToEmployeeCodes
+                      ? "Choose the months, office and departments to include — scoped to your team only."
+                      : "Choose the months, office and departments to include — spans every uploaded month, not just what's on screen."}
+                  </p>
+                </div>
+                <button onClick={() => setDialogOpen(false)} className="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors flex-shrink-0">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="scroll-thin px-5 py-4 space-y-4 overflow-y-auto">
+              {leaveLoadError && (
+                <div className="bg-red-900/30 border border-red-500/30 text-red-700 dark:text-red-300 text-xs rounded-lg px-3 py-2">
+                  {leaveLoadError}
+                </div>
+              )}
+              {/* From / To month */}
+              <div>
+                <label className="flex items-center gap-1.5 text-[var(--text-muted)] text-xs font-medium mb-1.5">
+                  <Calendar className="w-3.5 h-3.5" /> Month Range
+                </label>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={fromPeriod}
+                    onChange={(e) => setFromPeriod(e.target.value)}
+                    className="flex-1 bg-[var(--bg-elevated)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] focus:outline-none focus:border-blue-500"
+                  >
+                    {periods.map(p => <option key={p} value={p}>{periodLabel(p)}</option>)}
+                  </select>
+                  <span className="text-[var(--text-muted)] text-xs flex-shrink-0">to</span>
+                  <select
+                    value={toPeriod}
+                    onChange={(e) => setToPeriod(e.target.value)}
+                    className="flex-1 bg-[var(--bg-elevated)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] focus:outline-none focus:border-blue-500"
+                  >
+                    {periods.map(p => <option key={p} value={p}>{periodLabel(p)}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              {/* Office */}
+              <div>
+                <label className="flex items-center gap-1.5 text-[var(--text-muted)] text-xs font-medium mb-1.5">
+                  <Building2 className="w-3.5 h-3.5" /> Office
+                </label>
+                <select
+                  value={office}
+                  onChange={(e) => setOffice(e.target.value)}
+                  className="w-full bg-[var(--bg-elevated)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] focus:outline-none focus:border-blue-500"
+                >
+                  <option value="ALL">All Offices{offices.length > 1 ? ` (${offices.length})` : ''}</option>
+                  {offices.map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+              </div>
+
+              {/* Department */}
+              <div>
+                <label className="flex items-center gap-1.5 text-[var(--text-muted)] text-xs font-medium mb-1.5">
+                  <Users className="w-3.5 h-3.5" /> Departments
+                  {selectedDepts.length > 0 && <span className="text-[var(--text-muted)]">({selectedDepts.length} selected)</span>}
+                </label>
+                {departments.length === 0 ? (
+                  <p className="text-[var(--text-muted)] text-xs">No department data in this scope.</p>
+                ) : (
+                  // Flattened: nested inside the dialog body below, which
+                  // already scrolls. A wrapped list of pill buttons has no
+                  // fixed-height dependency, so it can flow with the body
+                  // instead of carrying its own independent scrollbar.
+                  <div className="flex flex-wrap gap-1.5">
+                    <button
+                      onClick={() => setSelectedDepts([])}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${selectedDepts.length === 0 ? 'bg-blue-600 text-white' : 'bg-[var(--bg-elevated)] text-[var(--text-muted)] hover:text-[var(--text-primary)] border border-[var(--border)]'}`}
+                    >
+                      All Departments
+                    </button>
+                    {departments.map(d => (
+                      <button
+                        key={d}
+                        onClick={() => toggleDept(d)}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${selectedDepts.includes(d) ? 'bg-blue-600 text-white' : 'bg-[var(--bg-elevated)] text-[var(--text-muted)] hover:text-[var(--text-primary)] border border-[var(--border)]'}`}
+                      >
+                        {d}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Scope summary */}
+              <div className="bg-[var(--bg-elevated)]/60 border border-[var(--border)] rounded-lg px-3 py-2 text-xs">
+                {canExport ? (
+                  <p className="text-[var(--text-muted)]">
+                    <span className="text-emerald-400 font-medium">{scopedMonths.length}</span> month{scopedMonths.length !== 1 ? 's' : ''} ·{' '}
+                    <span className="text-emerald-400 font-medium">{new Set(filteredRecords.map(r => r.employeeCode)).size}</span> employees ·{' '}
+                    <span className="text-emerald-400 font-medium">{filteredRecords.length.toLocaleString()}</span> records
+                  </p>
+                ) : (
+                  <p className="text-amber-400">No data matches this selection — adjust the range, office, or departments.</p>
+                )}
+              </div>
+            </div>
+
+            {/* Download actions */}
+            <div className="px-5 py-4 border-t border-[var(--border)] grid grid-cols-3 gap-2">
+              <button
+                onClick={handleExcel}
+                disabled={!canExport || loading !== null}
+                className="flex flex-col items-center gap-1.5 py-3 rounded-lg text-xs font-medium text-[var(--text-primary)] bg-[var(--bg-elevated)] hover:bg-[var(--bg-elevated)] border border-[var(--border)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {loading === 'excel' ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileSpreadsheet className="w-4 h-4 text-emerald-400" />}
+                Excel
+              </button>
+              <button
+                onClick={handleCSV}
+                disabled={!canExport || loading !== null}
+                className="flex flex-col items-center gap-1.5 py-3 rounded-lg text-xs font-medium text-[var(--text-primary)] bg-[var(--bg-elevated)] hover:bg-[var(--bg-elevated)] border border-[var(--border)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {loading === 'csv' ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4 text-blue-400" />}
+                CSV
+              </button>
+              <button
+                onClick={handlePDF}
+                disabled={!canExport || loading !== null}
+                className="flex flex-col items-center gap-1.5 py-3 rounded-lg text-xs font-medium text-[var(--text-primary)] bg-[var(--bg-elevated)] hover:bg-[var(--bg-elevated)] border border-[var(--border)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {loading === 'pdf' ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileIcon className="w-4 h-4 text-red-400" />}
+                PDF
+              </button>
+            </div>
+          </div>
+        </div>
+    ),
+    document.body
+  ) : null;
+
+  // Matches NavItemButton's baseClass exactly so this trigger sits flush
+  // with every other sidebar item instead of looking like a boxed-in
+  // outlier — same padding, same hover state, no border, same icon size.
+  const triggerClass = `flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors ${
+    compact ? 'justify-center' : 'justify-between'
+  } text-[var(--text-primary)] hover:bg-[var(--bg-elevated)] disabled:opacity-40 disabled:cursor-not-allowed`;
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => !disabled && setDialogOpen(true)}
+        disabled={disabled}
+        title={disabled ? 'No data to export' : compact ? 'Export' : undefined}
+        className={compact ? `relative ${triggerClass}` : triggerClass}
+      >
+        <span className={`flex items-center ${compact ? '' : 'gap-2.5'}`}>
+          <Download size={16} className="text-[var(--text-muted)]" />
+          {!compact && 'Export'}
+        </span>
+      </button>
+      {dialog}
+    </>
+  );
+}

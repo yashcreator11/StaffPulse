@@ -1,0 +1,155 @@
+import { redirect } from 'next/navigation';
+import { getCurrentEmployee } from '@/lib/leaveSupabase/getCurrentEmployee';
+import { createLeaveClient } from '@/lib/leaveSupabase/server';
+import { getEmployeeBalanceBreakdown } from '@/lib/leaveSupabase/getEmployeeBalances';
+import { selectAllRows } from '@/lib/attendanceExceptions';
+import MeNavbar from '@/components/leave/MeNavbar';
+import PersonalAttendanceReport from '@/components/leave/PersonalAttendanceReport';
+import LeaveBalanceCards from '@/components/leave/LeaveBalanceCards';
+import LeaveHistoryTable, { LeaveHistoryRow } from '@/components/leave/LeaveHistoryTable';
+import WfhPanel from '@/components/leave/WfhPanel';
+
+type HistoryRow = {
+  id: string;
+  start_date: string;
+  end_date: string;
+  is_half_day: boolean;
+  half_day_session: string | null;
+  total_days: number;
+  status: string;
+  source: string;
+  is_lwp_override: boolean;
+  applied_on: string;
+  correction_reason: string | null;
+  employees: { id: string; full_name: string; employee_code: string; department: string; office: string } | null;
+  leave_types: { code: string; display_name: string } | null;
+  corrector: { full_name: string } | null;
+};
+
+// A6 — Server Component that assembles Part A: personal attendance
+// report on the left, balance cards top-right, leave history
+// full-width at the bottom, Apply for Leave button in the navbar
+// (MeNavbar, the one client island on this page — see its own comment).
+//
+// History (A4) reuses LeaveHistoryTable.tsx directly, scoped to
+// employee_id = the logged-in user, by querying leave_requests the
+// exact same way app/api/leave/history/route.ts does — same table,
+// same shape, same "recordedBy" derivation — rather than round-tripping
+// through that route from a server component. All statuses
+// (pending/approved/rejected/cancelled/auto_lwp) are included; there's
+// no server-side status filter, LeaveHistoryTable renders whatever it's
+// given and the Status column already color-codes each one.
+export default async function LeaveMeHome() {
+  const employee = await getCurrentEmployee();
+  if (!employee) {
+    redirect('/leave/login');
+  }
+
+  const supabase = await createLeaveClient();
+
+  const [{ rows: balances }, { data: historyRaw }] = await Promise.all([
+    getEmployeeBalanceBreakdown(supabase, employee.id),
+    selectAllRows<HistoryRow>((from, to) =>
+      supabase
+        .from('leave_requests')
+        .select(
+          `
+          id, start_date, end_date, is_half_day, half_day_session, total_days,
+          status, source, is_lwp_override, applied_on, correction_reason,
+          employees!leave_requests_employee_id_fkey ( id, full_name, employee_code, department, office ),
+          leave_types ( code, display_name ),
+          corrector:employees!leave_requests_corrected_by_fkey ( full_name )
+        `
+        )
+        .eq('employee_id', employee.id)
+        .order('start_date', { ascending: false })
+        .range(from, to)
+        .returns<HistoryRow[]>()
+    ),
+  ]);
+
+  const history: LeaveHistoryRow[] = (historyRaw ?? [])
+    .filter((r) => r.employees && r.leave_types)
+    .map((r) => ({
+      id: r.id,
+      employeeId: r.employees!.id,
+      employeeName: r.employees!.full_name,
+      employeeCode: r.employees!.employee_code,
+      department: r.employees!.department,
+      office: r.employees!.office,
+      leaveTypeCode: r.leave_types!.code,
+      leaveTypeLabel: r.leave_types!.display_name,
+      startDate: r.start_date,
+      endDate: r.end_date,
+      isHalfDay: r.is_half_day,
+      halfDaySession: r.half_day_session,
+      totalDays: r.total_days,
+      status: r.status,
+      isLwpOverride: r.is_lwp_override,
+      appliedOn: r.applied_on,
+      recordedBy: r.source === 'hr_manual' ? 'HR (manual entry)' : 'Self-applied',
+      correctedByName: (Array.isArray(r.corrector) ? r.corrector[0] : r.corrector)?.full_name ?? null,
+      correctionReason: r.correction_reason,
+    }));
+
+  return (
+    <div className="max-w-6xl space-y-6">
+      {/* ── Welcome hero banner ─────────────────────────────────────── */}
+      <div
+        className="relative overflow-hidden rounded-2xl border border-[var(--border)] px-6 py-5 shadow-lg"
+        style={{
+          background: 'linear-gradient(135deg, var(--bg-card) 0%, var(--bg-elevated) 60%, var(--accent-subtle) 100%)',
+        }}
+      >
+        {/* Decorative orb */}
+        <div
+          className="absolute -top-10 -right-10 w-48 h-48 rounded-full opacity-10 pointer-events-none"
+          style={{ background: 'radial-gradient(circle, var(--accent) 0%, transparent 70%)' }}
+        />
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-[var(--accent)] mb-1">My Leave Portal</p>
+            <h1 className="text-xl sm:text-2xl font-bold text-[var(--text-primary)] tracking-tight">
+              {employee.full_name}
+            </h1>
+            <p className="text-sm text-[var(--text-muted)] mt-0.5">
+              {employee.employee_code} · {employee.department} · {employee.office}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border border-emerald-500/30 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              Active
+            </span>
+            <span className="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-semibold border border-[var(--border)] bg-[var(--bg-surface)] text-[var(--text-muted)] capitalize">
+              {employee.role?.replace(/_/g, ' ')}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Main grid: Attendance report + balance cards ─────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        <div className="lg:col-span-2">
+          <PersonalAttendanceReport />
+        </div>
+        <div>
+          <LeaveBalanceCards balances={balances} />
+        </div>
+      </div>
+
+      <WfhPanel />
+
+      {/* ── Leave History ────────────────────────────────────────────── */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-base font-bold text-[var(--text-primary)] tracking-tight">My Leave History</h2>
+            <p className="text-xs text-[var(--text-muted)] mt-0.5">{history.length} record{history.length !== 1 ? 's' : ''} found</p>
+          </div>
+        </div>
+        <LeaveHistoryTable rows={history} showActions />
+      </div>
+    </div>
+  );
+}

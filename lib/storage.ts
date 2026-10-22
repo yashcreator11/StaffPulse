@@ -1,0 +1,532 @@
+import { AttendanceRecord, ColumnMapping, UploadedMonth } from './types';
+import { applyEmployeeDirectory, ensureEmployeesFromAttendance } from './employeeStore';
+import { createClient } from './supabase/client';
+import { normalizeDate } from './parseCSV';
+
+// ═══════════════════════════════════════════════════════════════════════════
+// This file used to be pure localStorage. It's now backed by Supabase,
+// matching the tables already defined in supabase/schema.sql
+// (uploaded_months, attendance_records, column_mappings, ...).
+//
+// Every function keeps its original name/signature so no caller (page.tsx,
+// ExportPanel, SettingsPanel, BackupPanel, EmployeeComparisonPanel, etc.)
+// needs to change — they already `await` these calls.
+//
+// Row dates are trusted to be strict "YYYY-MM-DD" by the time they reach
+// saveRecords() — that normalization happens once, at CSV parse time, in
+// lib/parseCSV.ts. Don't re-introduce raw/unnormalized dates here.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const UPSERT_BATCH_SIZE = 500; // keep upsert payloads reasonably sized
+const SELECT_PAGE_SIZE = 1000; // Supabase/PostgREST's default max rows per request
+
+// Supabase caps a single .select() response at 1000 rows unless you paginate
+// with .range(). attendance_records can easily exceed that for one office/
+// month (employees * days-in-month), so any unbounded select('*') on it
+// silently truncates — e.g. 82 employees * ~30 days = ~2460 rows, only the
+// first 1000 come back, showing roughly the first ~33 employees and quietly
+// dropping the rest with no error. Page through with .range() instead.
+//
+// PERF FIX: pages used to be requested one at a time, each awaited before
+// the next was even started — for a large month (several thousand rows)
+// that serialized 3-5+ network round trips back to back on every single
+// load. There's no cheap way to know the total row count up front without
+// changing every caller to also request a `count`, so instead this fires a
+// small BATCH of page requests concurrently, checks whether the last page
+// in the batch was full, and only starts another batch if so. Any extra
+// page requested past the real end of the data just comes back empty
+// (Supabase's .range() doesn't error past the end), so this is safe even
+// when the true row count doesn't land on a batch boundary.
+const PAGE_BATCH_SIZE = 4; // 4 x 1000 = up to 4000 rows fetched concurrently per round
+
+async function selectAllRows<T>(
+  buildQuery: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: unknown }>,
+  options: { throwOnError?: boolean } = {}
+): Promise<T[]> {
+  const all: T[] = [];
+  let from = 0;
+  for (;;) {
+    const batchRequests = Array.from({ length: PAGE_BATCH_SIZE }, (_, i) => {
+      const pageFrom = from + i * SELECT_PAGE_SIZE;
+      const pageTo = pageFrom + SELECT_PAGE_SIZE - 1;
+      return buildQuery(pageFrom, pageTo);
+    });
+    const results = await Promise.all(batchRequests);
+
+    let sawError = false;
+    for (const { data, error } of results) {
+      if (error) {
+        console.error('selectAllRows failed:', error);
+        if (options.throwOnError) {
+          const msg = (error as { message?: string })?.message ?? 'unknown error';
+          throw new Error(msg);
+        }
+        sawError = true;
+        continue; // still keep any good pages already fetched in this batch
+      }
+      all.push(...(data ?? []));
+    }
+    if (sawError) break;
+
+    const lastPage = results[results.length - 1].data ?? [];
+    if (lastPage.length < SELECT_PAGE_SIZE) break; // reached the end of the table
+    from += PAGE_BATCH_SIZE * SELECT_PAGE_SIZE;
+  }
+  return all;
+}
+
+// ── Column Mappings (table: column_mappings) ─────────────────────────────────
+
+export async function getMapping(officeCode: string): Promise<ColumnMapping | null> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from('column_mappings')
+    .select('mapping')
+    .eq('office_code', officeCode)
+    .maybeSingle();
+  if (error) {
+    console.error('getMapping failed:', error);
+    return null;
+  }
+  return (data?.mapping as ColumnMapping | undefined) ?? null;
+}
+
+export async function saveMapping(officeCode: string, mapping: ColumnMapping): Promise<void> {
+  const supabase = createClient();
+  const { error } = await supabase
+    .from('column_mappings')
+    .upsert(
+      { office_code: officeCode, mapping, updated_at: new Date().toISOString() },
+      { onConflict: 'office_code' }
+    );
+  if (error) throw error;
+}
+
+export async function getAllMappings(): Promise<Record<string, ColumnMapping>> {
+  const supabase = createClient();
+  const { data, error } = await supabase.from('column_mappings').select('office_code, mapping');
+  if (error) {
+    console.error('getAllMappings failed:', error);
+    return {};
+  }
+  const all: Record<string, ColumnMapping> = {};
+  for (const row of data ?? []) {
+    all[row.office_code as string] = row.mapping as ColumnMapping;
+  }
+  return all;
+}
+
+export async function deleteMapping(officeCode: string): Promise<void> {
+  const supabase = createClient();
+  const { error } = await supabase.from('column_mappings').delete().eq('office_code', officeCode);
+  if (error) throw error;
+}
+
+// ── Attendance Records (table: attendance_records) ───────────────────────────
+
+function toDbRow(monthKey: string, r: AttendanceRecord) {
+  return {
+    month_key: monthKey,
+    employee_code: r.employeeCode,
+    employee_name: r.employeeName,
+    department: r.department,
+    date: r.date, // must already be YYYY-MM-DD — see lib/parseCSV.ts normalizeDate()
+    in_time: r.inTime || null,
+    out_time: r.outTime || null,
+    status: r.status || null,
+    punch_records: r.punchRecords ?? null,
+    late_by: r.lateBy ?? null,
+    early_by: r.earlyBy ?? null,
+    overtime: r.overtime ?? null,
+    duration: r.duration ?? null,
+    office_code: r.officeCode,
+    punch_count: r.punchCount ?? null,
+    is_short_day: r.isShortDay ?? null,
+    extra_fields: r.extraFields ?? null,
+    late_is_estimated: r.lateIsEstimated ?? null,
+    early_is_estimated: r.earlyIsEstimated ?? null,
+    updated_at: new Date().toISOString(),
+  };
+}
+
+function fromDbRow(row: Record<string, unknown>): AttendanceRecord {
+  const status = (row.status as string) ?? '';
+  const punchRecords = (row.punch_records as string) ?? undefined;
+  const punchCount = (row.punch_count as number) ?? undefined;
+
+  // Guard against ghost shift timings on absent / weekly-off rows with zero punch activity
+  const isAbsentNoPunch = (status.toLowerCase().includes('absent') || status.toLowerCase().includes('weeklyoff')) &&
+    (!punchCount || punchCount === 0) &&
+    (!punchRecords || punchRecords.trim() === '');
+  const inTime = isAbsentNoPunch ? '' : ((row.in_time as string) ?? '');
+  const outTime = isAbsentNoPunch ? '' : ((row.out_time as string) ?? '');
+  const duration = isAbsentNoPunch ? '0:00' : ((row.duration as string) ?? '0:00');
+
+  return {
+    date: normalizeDate((row.date as string) ?? ''),
+    employeeCode: row.employee_code as string,
+    employeeName: row.employee_name as string,
+    department: row.department as string,
+    inTime,
+    outTime,
+    status,
+    punchRecords,
+    lateBy: (row.late_by as string) ?? '0:00',
+    earlyBy: (row.early_by as string) ?? '0:00',
+    overtime: (row.overtime as string) ?? undefined,
+    duration,
+    officeCode: row.office_code as string,
+    punchCount,
+    isShortDay: (row.is_short_day as boolean) ?? undefined,
+    extraFields: (row.extra_fields as Record<string, string>) ?? undefined,
+    lateIsEstimated: (row.late_is_estimated as boolean) ?? undefined,
+    earlyIsEstimated: (row.early_is_estimated as boolean) ?? undefined,
+  };
+}
+
+// Upsert-by (employee_code, date, office_code) — matches the `unique` constraint
+// on attendance_records in supabase/schema.sql. New rows overwrite the old row
+// for that compound key; unrelated existing rows are untouched.
+export async function saveRecords(
+  monthKey: string,
+  records: AttendanceRecord[]
+): Promise<{ added: number; updated: number; employeesCreated: number; employeesSyncError?: string }> {
+  if (records.length === 0) return { added: 0, updated: 0, employeesCreated: 0 };
+  const supabase = createClient();
+
+  // Figure out added vs. updated BEFORE upserting, by checking which
+  // (employee_code, date, office_code) combos already exist for this month.
+  const { data: existingRows, error: fetchErr } = await supabase
+    .from('attendance_records')
+    .select('employee_code, date, office_code')
+    .eq('month_key', monthKey);
+  if (fetchErr) throw fetchErr;
+
+  const existingSet = new Set(
+    (existingRows ?? []).map((r) => `${r.employee_code}__${r.date}__${r.office_code}`)
+  );
+  let added = 0;
+  let updated = 0;
+  for (const r of records) {
+    const k = `${r.employeeCode}__${r.date}__${r.officeCode}`;
+    if (existingSet.has(k)) updated++;
+    else added++;
+  }
+
+  const rows = records.map((r) => toDbRow(monthKey, r));
+  for (let i = 0; i < rows.length; i += UPSERT_BATCH_SIZE) {
+    const batch = rows.slice(i, i + UPSERT_BATCH_SIZE);
+    const { error } = await supabase
+      .from('attendance_records')
+      .upsert(batch, { onConflict: 'employee_code,date,office_code' });
+    if (error) throw error;
+  }
+
+  // Auto-onboard any employee_code from this CSV that doesn't already exist
+  // in `employees` — this is what makes the Leave Tracker actually see
+  // people after a biometric upload, instead of staying empty until someone
+  // manually adds each person there. Existing employees are never touched
+  // here (see ensureEmployeesFromAttendance's doc comment) — this only fails
+  // open (attendance data is still saved) if the employee sync errors, since
+  // losing attendance data over a directory-sync problem would be worse.
+  const syncResult = await ensureEmployeesFromAttendance(records);
+
+  // This month's data just changed — drop it from the cache so the next
+  // getRecords(monthKey) call re-fetches instead of serving stale rows.
+  invalidateMonthRecordsCache(monthKey);
+
+  return {
+    added,
+    updated,
+    employeesCreated: syncResult.created,
+    employeesSyncError: syncResult.success ? undefined : syncResult.error,
+  };
+}
+
+// PERF FIX: in-memory cache of raw rows, keyed by monthKey. Before this,
+// DashboardClient re-fetched EVERY uploaded month's attendance data from
+// Supabase from scratch on every mount, every month-dropdown change, and
+// every time the uploaded-months list changed (e.g. re-running its "all
+// uploaded records" effect) — the exact same rows, downloaded again and
+// again, with no caching anywhere in the client. This cache only holds the
+// raw DB rows (pre-directory-overlay), never the final AttendanceRecord[],
+// and is invalidated for a monthKey the moment that month is written to
+// (saveRecords) or the whole cache is cleared on a full backup restore
+// (importAllData) — so a month's cached rows are only ever served up to
+// the point new data for that month is actually saved, never stale.
+// Directory overlays (department reassignment/deletion) are cheap and
+// already cached separately in lib/employeeStore.ts, so re-applying them
+// on every call here (rather than caching the overlaid result) is safe
+// and keeps reassignments reflected immediately without invalidating this
+// cache.
+const monthRecordsCache = new Map<string, Record<string, unknown>[]>();
+
+function invalidateMonthRecordsCache(monthKey?: string) {
+  if (monthKey) monthRecordsCache.delete(monthKey);
+  else monthRecordsCache.clear();
+}
+
+const ATTENDANCE_RECORD_SELECT_COLUMNS =
+  'date, employee_code, employee_name, department, in_time, out_time, status, punch_records, late_by, early_by, overtime, duration, office_code, punch_count, is_short_day, extra_fields, late_is_estimated, early_is_estimated';
+
+export async function getRecords(monthKey: string): Promise<AttendanceRecord[]> {
+  let data = monthRecordsCache.get(monthKey);
+  if (!data) {
+    const supabase = createClient();
+    data = await selectAllRows<Record<string, unknown>>((from, to) =>
+      supabase
+        .from('attendance_records')
+        .select(ATTENDANCE_RECORD_SELECT_COLUMNS)
+        .eq('month_key', monthKey)
+        .range(from, to)
+    );
+    monthRecordsCache.set(monthKey, data);
+  }
+  const records = data.map(fromDbRow);
+  // Overlay any HR-made department reassignments / deletions — non-destructive,
+  // the underlying DB rows are never touched by this.
+  return applyEmployeeDirectory(records);
+}
+
+export async function getAllRecords(): Promise<AttendanceRecord[]> {
+  const supabase = createClient();
+  const data = await selectAllRows<Record<string, unknown>>((from, to) =>
+    supabase.from('attendance_records').select(ATTENDANCE_RECORD_SELECT_COLUMNS).range(from, to)
+  );
+  return applyEmployeeDirectory(data.map(fromDbRow));
+}
+
+// Scoped team records fetched directly at the DB level via employee_code IN (...)
+// Codes are sent to PostgREST as a GET query-string (`employee_code=in.(a,b,c)`),
+// so a manager with a big hierarchy (hundreds of codes x 4 concurrent pages)
+// can exceed the URL length limit and the request fails outright. Chunk them.
+const TEAM_CODE_CHUNK_SIZE = 100;
+
+// Throws on failure (instead of returning []) so the caller can tell
+// "your team has no attendance data" apart from "the load failed".
+export async function getTeamRecords(employeeCodes: string[]): Promise<AttendanceRecord[]> {
+  if (!employeeCodes || employeeCodes.length === 0) return [];
+  const supabase = createClient();
+  const uniqueCodes = Array.from(new Set(employeeCodes));
+  const chunks: string[][] = [];
+  for (let i = 0; i < uniqueCodes.length; i += TEAM_CODE_CHUNK_SIZE) {
+    chunks.push(uniqueCodes.slice(i, i + TEAM_CODE_CHUNK_SIZE));
+  }
+  const perChunk = await Promise.all(
+    chunks.map((codes) =>
+      selectAllRows<Record<string, unknown>>(
+        (from, to) =>
+          supabase
+            .from('attendance_records')
+            .select(ATTENDANCE_RECORD_SELECT_COLUMNS)
+            .in('employee_code', codes)
+            .range(from, to),
+        { throwOnError: true }
+      )
+    )
+  );
+  return applyEmployeeDirectory(perChunk.flat().map(fromDbRow));
+}
+
+// One employee's records from every uploaded month (same office), sorted
+// oldest → newest, for "compare with own previous month" view.
+export async function getEmployeeMonthHistory(
+  employeeCode: string,
+  officeCode: string
+): Promise<
+  { monthKey: string; label: string; year: string; month: string; officeCode: string; records: AttendanceRecord[] }[]
+> {
+  const months = (await getUploadedMonths()).filter((m) => m.officeCode === officeCode);
+  const results = await Promise.all(
+    months.map(async (m) => ({
+      monthKey: m.key,
+      label: m.label,
+      year: m.year,
+      month: m.month,
+      officeCode: m.officeCode,
+      records: (await getRecords(m.key)).filter((r) => r.employeeCode === employeeCode),
+    }))
+  );
+  return results
+    .filter((m) => m.records.length > 0)
+    .sort((a, b) => `${a.records[0]?.date}`.localeCompare(`${b.records[0]?.date}`));
+}
+
+// ── Uploaded Months (table: uploaded_months) ──────────────────────────────────
+
+export async function getUploadedMonths(): Promise<UploadedMonth[]> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from('uploaded_months')
+    .select('key, label, office_code, month, year')
+    .order('created_at', { ascending: true });
+  if (error) {
+    console.error('getUploadedMonths failed:', error);
+    return [];
+  }
+  return (data ?? []).map((m) => ({
+    key: m.key as string,
+    label: m.label as string,
+    officeCode: m.office_code as string,
+    month: m.month as string,
+    year: m.year as string,
+  }));
+}
+
+// Must be called (and awaited) BEFORE saveRecords() for the same monthKey —
+// attendance_records.month_key has a foreign key referencing uploaded_months.key,
+// so inserting attendance rows first would throw a 23503 FK violation.
+export async function addUploadedMonth(month: UploadedMonth): Promise<void> {
+  const supabase = createClient();
+  const { error } = await supabase
+    .from('uploaded_months')
+    .upsert(
+      { key: month.key, label: month.label, office_code: month.officeCode, month: month.month, year: month.year },
+      { onConflict: 'key' }
+    );
+  if (error) throw error;
+}
+
+// ── Full data backup / restore ────────────────────────────────────────────────
+// Everything now lives in Supabase across several tables (rather than one flat
+// localStorage namespace), so export/import walks each table explicitly.
+// NOTE: this is a NEW backup format (version 2). Old (version 1, localStorage-
+// era) backup files are no longer compatible — re-export a fresh one.
+
+const BACKUP_TABLES = [
+  'uploaded_months',
+  'attendance_records',
+  'column_mappings',
+  'leave_records',
+  'custom_holidays',
+  'dashboard_settings',
+] as const;
+
+type BackupTable = (typeof BACKUP_TABLES)[number];
+
+const BACKUP_CONFLICT_KEYS: Record<BackupTable, string> = {
+  uploaded_months: 'key',
+  attendance_records: 'employee_code,date,office_code',
+  column_mappings: 'office_code',
+  leave_records: 'employee_code,date',
+  custom_holidays: 'office_code,year,date',
+  dashboard_settings: 'id',
+};
+
+export interface BackupFile {
+  app: 'attendance-dashboard-poc';
+  version: 2;
+  exportedAt: string;
+  data: Record<BackupTable, Record<string, unknown>[]>;
+}
+
+export async function exportAllData(): Promise<BackupFile> {
+  const supabase = createClient();
+  const results = await Promise.all(
+    BACKUP_TABLES.map((t) =>
+      selectAllRows<Record<string, unknown>>((from, to) =>
+        supabase.from(t).select('*').range(from, to)
+      )
+    )
+  );
+
+  const data = {} as Record<BackupTable, Record<string, unknown>[]>;
+  BACKUP_TABLES.forEach((table, i) => {
+    data[table] = results[i];
+  });
+
+  return {
+    app: 'attendance-dashboard-poc',
+    version: 2,
+    exportedAt: new Date().toISOString(),
+    data,
+  };
+}
+
+export async function importAllData(backup: BackupFile): Promise<{ imported: number }> {
+  if (!backup || typeof backup !== 'object' || !backup.data || typeof backup.data !== 'object') {
+    throw new Error('Invalid backup file');
+  }
+  if (backup.version !== 2) {
+    throw new Error(
+      'This backup is from an older version of the app (pre-Supabase) and can no longer be restored. Please use a backup exported after the database migration.'
+    );
+  }
+
+  const supabase = createClient();
+  let imported = 0;
+
+  // uploaded_months first — attendance_records references it via foreign key.
+  for (const table of BACKUP_TABLES) {
+    const rows = backup.data[table];
+    if (!Array.isArray(rows) || rows.length === 0) continue;
+
+    const conflictKey = BACKUP_CONFLICT_KEYS[table];
+    for (let i = 0; i < rows.length; i += UPSERT_BATCH_SIZE) {
+      const batch = rows.slice(i, i + UPSERT_BATCH_SIZE);
+      const { error } = await supabase.from(table).upsert(batch, { onConflict: conflictKey });
+      if (error) throw error;
+      imported += batch.length;
+    }
+  }
+
+  // A restore can touch attendance_records for any/every month — clear the
+  // whole cache rather than trying to figure out which monthKeys changed.
+  invalidateMonthRecordsCache();
+
+  return { imported };
+}
+
+// ── Existing date-range query (for Import Preview overlap detection) ───────────
+// Returns the earliest and latest `date` values already stored in
+// attendance_records for a given office code, or null if nothing is stored yet.
+// Used by the ImportPreviewModal to warn the user before overwriting.
+export async function getExistingDateRange(
+  officeCode: string
+): Promise<{ minDate: string; maxDate: string } | null> {
+  const supabase = createClient();
+  // Supabase/PostgREST can compute min/max server-side via .select('date.min(),date.max()')
+  // but the JS client returns them as strings; fall back to a simple bounded select
+  // and derive min/max client-side — still fast because we only fetch 2 columns.
+  const { data, error } = await supabase
+    .from('attendance_records')
+    .select('date')
+    .eq('office_code', officeCode)
+    .order('date', { ascending: true })
+    .limit(1);
+  if (error || !data || data.length === 0) return null;
+  const minDate = data[0].date as string;
+
+  const { data: data2, error: error2 } = await supabase
+    .from('attendance_records')
+    .select('date')
+    .eq('office_code', officeCode)
+    .order('date', { ascending: false })
+    .limit(1);
+  if (error2 || !data2 || data2.length === 0) return null;
+  const maxDate = data2[0].date as string;
+
+  return { minDate, maxDate };
+}
+
+// ── Delete records within a date range for an office ─────────────────────────
+// Used by "Import New Only" path to ensure we never implicitly overwrite dates
+// that the user chose to keep. (The upsert still only touches rows that are in
+// the CSV, but this helper is available for any future hard-delete use-case.)
+export async function deleteRecordsByDateRange(
+  officeCode: string,
+  startDate: string,
+  endDate: string
+): Promise<void> {
+  const supabase = createClient();
+  const { error } = await supabase
+    .from('attendance_records')
+    .delete()
+    .eq('office_code', officeCode)
+    .gte('date', startDate)
+    .lte('date', endDate);
+  if (error) throw error;
+  // Invalidate all cached month keys for this office so the next getRecords()
+  // call picks up the deletions rather than serving the now-stale cached rows.
+  invalidateMonthRecordsCache();
+}

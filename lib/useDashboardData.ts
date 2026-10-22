@@ -1,0 +1,836 @@
+import { useMemo } from 'react';
+import {
+  AttendanceRecord, KPIData, EmployeeSummary, DailyTrend, DeptAttendance,
+  HoursDistribution, Holiday, OfficeAttendance, LeaveRecord, LeaveType, Thresholds, EffectiveStatus, WorkforceEvent
+} from './types';
+import { durationToMinutes, minutesToHHMM } from './parseCSV';
+import { isHoliday, getHolidayName } from './holidays';
+import { DEFAULT_THRESHOLDS } from './settings';
+import { effectiveMinutes, lunchOverlapMinutes } from './hoursCalc';
+
+// Shift: 9:30 to 18:30, 1h lunch → 8h effective work expected
+export const SHIFT_MINUTES = 8 * 60;             // 480 effective minutes
+export const SHIFT_START_MINUTES = 9 * 60 + 30;  // 570 — 09:30 AM
+export const SHIFT_END_MINUTES = 18 * 60 + 30;   // 1110 — 18:30
+
+export function getEffectiveLeaveType(r: AttendanceRecord, leave?: LeaveRecord): LeaveType | null {
+  if (leave) return leave.leaveType;
+  const s = (r.status || '').toLowerCase();
+  if (s.includes('sick')) return 'sick';
+  if (s.includes('planned')) return 'planned';
+  if (s.includes('casual')) return 'casual';
+  if (s.includes('lwp')) return 'lwp';
+  if (s.includes('half_day') || s.includes('half day')) return 'half_day';
+  return null;
+}
+
+// AFTER
+export function isPresent(status: string): boolean {
+  const s = status.toLowerCase();
+  if (isMissedPunchOut(status)) return true;   // punched in, so it's present
+  return s.includes('present') && !s.includes('absent');
+}
+
+export function isAbsent(status: string): boolean {
+  const s = status.toLowerCase();
+  if (isMissedPunchOut(status)) return false;  // no longer counts as absent
+  return (
+    s.includes('absent') ||
+    s === 'absent (no outpunch)' ||
+    s.includes('sick') ||
+    s.includes('planned') ||
+    s.includes('casual') ||
+    s.includes('lwp')
+  );
+}
+
+export function isWeeklyOff(status: string): boolean {
+  const s = status.toLowerCase();
+  // "WeeklyOff Present" means the employee actually came in and worked on
+  // their scheduled day off — that's a present day, not a day off, and
+  // must NOT be treated as weekly-off (this function is used everywhere as
+  // an exclusion filter, so misclassifying it here silently drops a real
+  // worked day from every present/absent/total count for that employee).
+  return s.includes('weeklyoff') && !s.includes('present');
+}
+
+// Flags a day-record where a swipe in or out wasn't captured by the machine
+// (e.g. "Absent (No Outpunch)") — these already count toward isAbsent(), but
+// callers like the PDF export surface them separately as a "worth a manual
+// check before treating as a genuine absence" note rather than silently
+// folding them into the absence count with no explanation.
+export function isMissedPunchOut(status: string): boolean {
+  const s = status.toLowerCase();
+  return s.includes('no outpunch') || s.includes('missed punch') || s.includes('no punch out');
+}
+
+export function colorStatus(rate: number, greenThreshold: number, amberThreshold: number, reverse = false): 'green' | 'amber' | 'red' {
+  if (!reverse) {
+    if (rate >= greenThreshold) return 'green';
+    if (rate >= amberThreshold) return 'amber';
+    return 'red';
+  } else {
+    if (rate < greenThreshold) return 'green';
+    if (rate < amberThreshold) return 'amber';
+    return 'red';
+  }
+}
+
+export function timeStringToMinutes(timeStr: string): number {
+  if (!timeStr || timeStr === '--' || timeStr === '') return -1;
+  const parts = timeStr.split(':');
+  if (parts.length < 2) return -1;
+  const hours = parseInt(parts[0], 10);
+  const mins = parseInt(parts[1], 10);
+  if (isNaN(hours) || isNaN(mins)) return -1;
+  return hours * 60 + mins;
+}
+
+// ── Punctuality consistency (avg punch time + how spread out it is) ──────────
+// Mean of a set of minutes-from-midnight punch times.
+function meanMinutes(values: number[]): number {
+  if (values.length === 0) return -1;
+  return values.reduce((a, b) => a + b, 0) / values.length;
+}
+
+// Population standard deviation of punch times around their own mean — this
+// is the "consistency" number: a low value means the employee punches in/out
+// around the same time every day, a high value means it's erratic even if
+// the average looks fine. Needs at least 2 samples to be meaningful; callers
+// should treat undefined as "not enough data" rather than 0 (perfectly
+// consistent).
+function stdDevMinutes(values: number[]): number | undefined {
+  if (values.length < 2) return undefined;
+  const m = meanMinutes(values);
+  const variance = values.reduce((sum, v) => sum + (v - m) ** 2, 0) / values.length;
+  return Math.sqrt(variance);
+}
+
+export function computeLateMinutes(
+  inTime: string,
+  graceMinutes: number = 10,
+  shiftStart: number = SHIFT_START_MINUTES
+): number {
+  const inMins = timeStringToMinutes(inTime);
+  if (inMins < 0) return 0;
+  return Math.max(0, inMins - shiftStart - graceMinutes);
+}
+
+export function computeEarlyMinutes(
+  outTime: string,
+  graceMinutes: number = 10,
+  shiftEnd: number = SHIFT_END_MINUTES
+): number {
+  const outMins = timeStringToMinutes(outTime);
+  if (outMins <= 0) return 0;
+  return Math.max(0, shiftEnd - graceMinutes - outMins);
+}
+
+// Spec v1 §1 (Global Rule): Late/Early are ALWAYS derived from the raw punch
+// time (inTime/outTime) compared against Shift Start/End + Grace. The CSV's
+// own lateBy/earlyBy columns are never used for calculation, anywhere, for
+// any card or chart — the biometric system's own shift-start assumption may
+// not match the configured policy, so trusting it silently under-reports
+// lateness. r.lateBy/r.earlyBy are display-only (e.g. in exports' "as
+// reported by device" column) and must never feed a calculation.
+export function getLateMinutes(
+  r: AttendanceRecord,
+  graceMinutes: number,
+  shiftStart: number = SHIFT_START_MINUTES
+): number {
+  return computeLateMinutes(r.inTime, graceMinutes, shiftStart);
+}
+
+export function getEarlyMinutes(
+  r: AttendanceRecord,
+  graceMinutes: number,
+  shiftEnd: number = SHIFT_END_MINUTES
+): number {
+  return computeEarlyMinutes(r.outTime, graceMinutes, shiftEnd);
+}
+
+/**
+ * Target effective minutes for a shift window: (shiftEnd - shiftStart) - 60min
+ * lunch. Defaults to the default 09:30–18:30 window (480 effective minutes)
+ * when no shift window is supplied, matching SHIFT_MINUTES.
+ */
+export function targetShiftMinutes(
+  shiftStart: number = SHIFT_START_MINUTES,
+  shiftEnd: number = SHIFT_END_MINUTES
+): number {
+  return Math.max(0, (shiftEnd - shiftStart) - 60);
+}
+
+/**
+ * Productivity Lost (minutes) for a record:
+ *
+ * Productivity lost = how many minutes short of the configured shift's
+ * target effective time (Shift End - Shift Start - 60min lunch) the
+ * employee actually worked, clamped to ≥ 0.
+ *
+ * Examples (default 09:30–18:30 shift, 480 target, all with 10-min grace):
+ *   In 10:00 Out 18:30 → duration ≈ 8h30m → 8h30 - 8h = 0 (no loss, though late)
+ *   In 09:30 Out 17:00 → duration ≈ 7h30m → 8h - 7h30 = 30 min lost
+ *   In 10:00 Out 18:00 → duration ≈ 8h    → 8h - 8h = 0 lost (came late but stayed)
+ *   In 09:45 Out 17:30 → duration ≈ 7h45m → 8h - 7h45 = 15 min lost
+ *
+ * We use the CSV duration (in/out difference) directly. If absent / no duration, 0.
+ * shiftStart/shiftEnd MUST come from the same Thresholds object as every
+ * other consumer — never a hardcoded default sitting silently in a caller.
+ */
+export function computeProductivityLostMinutes(
+  r: AttendanceRecord,
+  shiftStart: number = SHIFT_START_MINUTES,
+  shiftEnd: number = SHIFT_END_MINUTES
+): number {
+  if (!isPresent(r.status) || r.isShortDay) return 0;
+  const worked = durationToMinutes(r.duration);
+  if (worked <= 0) return 0;
+  // The CSV "duration" from in/out punch already includes lunch time in total
+  // hours, so: effective = worked - 60 (lunch), then compare against the
+  // shift's target effective minutes. If worked ≤ 60 that means they barely
+  // punched in - no lunch subtraction.
+  const lunchMinutes = (() => {
+    const outMins = timeStringToMinutes(r.outTime);
+    if (outMins > 0) {
+      const inMins = timeStringToMinutes(r.inTime);
+      return lunchOverlapMinutes(inMins >= 0 ? inMins : outMins - worked, outMins);
+    }
+    // Fallback: flat rule
+    return worked > 60 ? 60 : 0;
+  })();
+  const effective = worked - lunchMinutes;
+  return Math.max(0, targetShiftMinutes(shiftStart, shiftEnd) - effective);
+}
+
+export function getEffectiveStatus(
+  r: AttendanceRecord,
+  leave: LeaveRecord | undefined,
+  holidays: Holiday[],
+  workforceEvent?: WorkforceEvent
+): EffectiveStatus {
+  if (isWeeklyOff(r.status)) return 'weeklyoff';
+  if (isHoliday(r.date, holidays) && !isPresent(r.status)) return 'holiday';
+  if (leave) {
+    if (leave.leaveType === 'half_day') return 'half_day';
+    if (leave.leaveType === 'planned') return 'leave_planned';
+    if (leave.leaveType === 'casual') return 'leave_casual';
+    if (leave.leaveType === 'sick') return 'leave_sick';
+    if (leave.leaveType === 'lwp') return 'leave_lwp';
+  }
+  // D7-3 (stretch): WFH / Business Travel / Office Shutdown are workforce
+  // signals, not leave — checked after leave (an approved leave day takes
+  // precedence over a stale/overlapping workforce_events row) and only
+  // when the optional 4th arg is actually supplied, so every existing
+  // 3-arg call site keeps behaving exactly as before.
+  if (workforceEvent) {
+    if (workforceEvent.eventType === 'wfh') return 'wfh';
+    if (workforceEvent.eventType === 'business_travel') return 'business_travel';
+    if (workforceEvent.eventType === 'office_shutdown') return 'office_shutdown';
+  }
+  if (isPresent(r.status)) return 'present';
+  return 'absent';
+}
+
+export function leaveKey(employeeCode: string, date: string): string {
+  return `${employeeCode}__${date}`;
+}
+
+export function buildLeaveMap(leaveRecords: LeaveRecord[]): Map<string, LeaveRecord> {
+  const m = new Map<string, LeaveRecord>();
+  for (const l of leaveRecords) m.set(leaveKey(l.employeeCode, l.date), l);
+  return m;
+}
+
+// D7-3 (stretch): same key shape as leaveKey/buildLeaveMap, for
+// WorkforceEvent — kept as a separate map rather than merged into
+// leaveMap so a workforce event can never be mistaken for a leave record
+// by a caller that forgets to check which one it pulled out.
+export function workforceEventKey(employeeCode: string, date: string): string {
+  return `${employeeCode}__${date}`;
+}
+
+export function buildWorkforceEventMap(events: WorkforceEvent[]): Map<string, WorkforceEvent> {
+  const m = new Map<string, WorkforceEvent>();
+  for (const e of events) m.set(workforceEventKey(e.employeeCode, e.date), e);
+  return m;
+}
+
+export interface ComparisonKPIs {
+  attendanceRate: number;
+  absenteeismRate: number;
+  avgHoursPerDay: number;
+  lateArrivalRate: number;
+  earlyExitRate: number;
+  productivityLost: number;
+  presentDays: number;
+  absentDays: number;
+  approvedLeaveDays: number;
+  plannedLeaveCount: number;
+  casualLeaveCount: number;
+  sickLeaveCount: number;
+  lwpCount: number;
+  halfDayCount: number;
+  scheduledDays: number;
+  presentSampleSize: number;
+  avgInTime?: number;
+  avgOutTime?: number;
+  inTimeDeviation?: number;
+  outTimeDeviation?: number;
+}
+
+export function computeEmployeeKPIs(
+  records: AttendanceRecord[],
+  leaveMap: Map<string, LeaveRecord>,
+  holidays: Holiday[] = [],
+  grace: number = 10,
+  shiftStart: number = SHIFT_START_MINUTES,
+  shiftEnd: number = SHIFT_END_MINUTES
+): ComparisonKPIs {
+  const workRecords = records.filter((r) => {
+    if (isWeeklyOff(r.status)) return false;
+    if (isHoliday(r.date, holidays) && !isPresent(r.status)) return false;
+    return true;
+  });
+
+  const presentRecords: AttendanceRecord[] = [];
+  const halfDayRecords: AttendanceRecord[] = [];
+  let plannedLeaveCount = 0, unexplainedAbsentCount = 0, casualLeaveCount = 0, sickLeaveCount = 0, lwpCount = 0;
+
+  for (const r of workRecords) {
+    const leave = leaveMap.get(leaveKey(r.employeeCode, r.date));
+    const effectiveLeaveType = getEffectiveLeaveType(r, leave);
+    const isFullDayLeave = effectiveLeaveType && effectiveLeaveType !== 'half_day';
+
+    if (isFullDayLeave) {
+      if (effectiveLeaveType === 'planned') plannedLeaveCount++;
+      else if (effectiveLeaveType === 'casual') casualLeaveCount++;
+      else if (effectiveLeaveType === 'sick') sickLeaveCount++;
+      else if (effectiveLeaveType === 'lwp') { lwpCount++; unexplainedAbsentCount++; }
+    } else if (effectiveLeaveType === 'half_day') {
+      halfDayRecords.push(r);
+    } else if (r.isShortDay) {
+      // short day without leave
+    } else if (isPresent(r.status)) {
+      presentRecords.push(r);
+    } else if (isAbsent(r.status)) {
+      unexplainedAbsentCount++;
+    }
+  }
+  const halfDayCount = halfDayRecords.length;
+
+  const scheduledDays = workRecords.length;
+  const absentDays = unexplainedAbsentCount;
+  const presentDays = presentRecords.length + halfDayCount * 0.5;
+
+  const explainedLeave = plannedLeaveCount + casualLeaveCount + sickLeaveCount + (halfDayCount * 0.5);
+  // Attendance rate: full scheduledDays as denominator — approved leave is
+  // NOT excluded, so it counts against attendance rate (matches the
+  // dashboard-wide employeeSummaries calc above). explainedLeave is still
+  // returned separately as approvedLeaveDays for the "On Leave" card.
+  const attendanceRate = scheduledDays > 0 ? (presentDays / scheduledDays) * 100 : 0;
+  const absenteeismRate = scheduledDays > 0 ? (absentDays / scheduledDays) * 100 : 0;
+
+  // Effective hours: lunch deducted only for the portion overlapping 13:00–14:00
+  const presentWithDuration = [...presentRecords, ...halfDayRecords].filter((r) => effectiveMinutes(durationToMinutes(r.duration), r.outTime, r.inTime) !== null);
+  const totalEffectiveMins = presentWithDuration.reduce(
+    (sum, r) => sum + (effectiveMinutes(durationToMinutes(r.duration), r.outTime, r.inTime) ?? 0), 0
+  );
+  const avgHoursPerDay = presentWithDuration.length > 0 ? totalEffectiveMins / presentWithDuration.length / 60 : 0;
+
+  const lateRecords = presentRecords.filter((r) => getLateMinutes(r, grace, shiftStart) > 0);
+  const earlyRecords = presentRecords.filter((r) => getEarlyMinutes(r, grace, shiftEnd) > 0);
+  const lateArrivalRate = presentRecords.length > 0 ? (lateRecords.length / presentRecords.length) * 100 : 0;
+  const earlyExitRate = presentRecords.length > 0 ? (earlyRecords.length / presentRecords.length) * 100 : 0;
+
+  // Productivity lost = total minutes short of the configured shift's target
+  // effective work, tracking Shift Start/End rather than a frozen 480.
+  const totalLostMins = presentRecords.reduce((sum, r) => sum + computeProductivityLostMinutes(r, shiftStart, shiftEnd), 0);
+  const totalShiftMins = presentRecords.length * targetShiftMinutes(shiftStart, shiftEnd);
+  const productivityLost = totalShiftMins > 0 ? (totalLostMins / totalShiftMins) * 100 : 0;
+
+  const inTimes = presentRecords.map((r) => timeStringToMinutes(r.inTime)).filter((m) => m >= 0);
+  const outTimes = presentRecords.map((r) => timeStringToMinutes(r.outTime)).filter((m) => m > 0);
+  const avgInTime = inTimes.length > 0 ? Math.round(meanMinutes(inTimes)) : undefined;
+  const avgOutTime = outTimes.length > 0 ? Math.round(meanMinutes(outTimes)) : undefined;
+  const inTimeDeviation = stdDevMinutes(inTimes);
+  const outTimeDeviation = stdDevMinutes(outTimes);
+
+  return {
+    attendanceRate, absenteeismRate, avgHoursPerDay, lateArrivalRate, earlyExitRate,
+    productivityLost, presentDays, absentDays, approvedLeaveDays: explainedLeave,
+    plannedLeaveCount, casualLeaveCount, sickLeaveCount, lwpCount, halfDayCount, scheduledDays,
+    presentSampleSize: presentRecords.length + halfDayRecords.length,
+    avgInTime, avgOutTime, inTimeDeviation, outTimeDeviation,
+  };
+}
+
+export function useDashboardData(
+  records: AttendanceRecord[],
+  selectedOffice: string,
+  selectedDepartments: string[],
+  selectedEmployees: string[] = [],
+  holidays: Holiday[] = [],
+  thresholds: Thresholds = DEFAULT_THRESHOLDS,
+  leaveRecords: LeaveRecord[] = [],
+  allOfficeRecords: AttendanceRecord[] = [],
+  dateFrom: string | null = null,
+  dateTo: string | null = null
+) {
+  const isSingleDay = !!(dateFrom && dateTo && dateFrom === dateTo);
+  const viewMode: import('./types').ViewMode =
+    selectedDepartments.length >= 2 ? 'comparison'
+    : isSingleDay ? 'single_day'
+    : 'monthly';
+
+  const grace = thresholds.graceMinutes;
+  const shiftStart = thresholds.shiftStartMinutes;
+  const shiftEnd = thresholds.shiftEndMinutes;
+  const leaveMap = useMemo(() => buildLeaveMap(leaveRecords), [leaveRecords]);
+
+  const filtered = useMemo(() => {
+    return records.filter((r) => {
+      if (selectedOffice !== 'ALL' && r.officeCode !== selectedOffice) return false;
+      if (selectedDepartments.length > 0 && !selectedDepartments.includes(r.department)) return false;
+      if (selectedEmployees.length > 0 && !selectedEmployees.includes(r.employeeCode)) return false;
+      if (dateFrom && r.date < dateFrom) return false;
+      if (dateTo && r.date > dateTo) return false;
+      return true;
+    });
+  }, [records, selectedOffice, selectedDepartments, selectedEmployees, dateFrom, dateTo]);
+
+  const kpi: KPIData = useMemo(() => {
+    let scheduledCount = 0;
+    let presentCount = 0;
+    let presentRecordsCount = 0;
+    let totalEffectiveMins = 0;
+    let presentWithDurationCount = 0;
+    let lateCount = 0;
+    let earlyExitCount = 0;
+    let totalLostMins = 0;
+    let shortDayCount = 0;
+    let halfDayCount = 0;
+    let plannedLeaveCount = 0;
+    let casualLeaveCount = 0;
+    let sickLeaveCount = 0;
+    let lwpCount = 0;
+    let unexplainedAbsentCount = 0;
+    const empPunchMap = new Set<string>();
+
+    const targetMins = targetShiftMinutes(shiftStart, shiftEnd);
+
+    for (let i = 0; i < filtered.length; i++) {
+      const r = filtered[i];
+
+      if ((r.punchCount ?? 1) >= thresholds.frequentPunchCount) {
+        empPunchMap.add(r.employeeCode);
+      }
+
+      if (isWeeklyOff(r.status)) continue;
+      if (isHoliday(r.date, holidays) && !isPresent(r.status)) continue;
+
+      scheduledCount++;
+
+      const leave = leaveMap.get(leaveKey(r.employeeCode, r.date));
+      const effectiveLeaveType = getEffectiveLeaveType(r, leave);
+      const isFullDayLeave = effectiveLeaveType && effectiveLeaveType !== 'half_day';
+
+      if (isFullDayLeave) {
+        if (effectiveLeaveType === 'planned') {
+          plannedLeaveCount++;
+        } else if (effectiveLeaveType === 'casual') {
+          casualLeaveCount++;
+        } else if (effectiveLeaveType === 'sick') {
+          sickLeaveCount++;
+        } else if (effectiveLeaveType === 'lwp') {
+          lwpCount++;
+        }
+      } else if (effectiveLeaveType === 'half_day') {
+        halfDayCount++;
+        presentCount += 0.5;
+      } else if (r.isShortDay) {
+        shortDayCount++;
+      } else if (isPresent(r.status)) {
+        presentCount++;
+        presentRecordsCount++;
+
+        const rawMins = durationToMinutes(r.duration);
+        const eff = effectiveMinutes(rawMins, r.outTime, r.inTime);
+        if (eff !== null) {
+          totalEffectiveMins += eff;
+          presentWithDurationCount++;
+        }
+
+        if (getLateMinutes(r, grace, shiftStart) > 0) lateCount++;
+        if (getEarlyMinutes(r, grace, shiftEnd) > 0) earlyExitCount++;
+        totalLostMins += computeProductivityLostMinutes(r, shiftStart, shiftEnd);
+      } else if (isAbsent(r.status)) {
+        unexplainedAbsentCount++;
+      }
+    }
+
+    const absentCount = unexplainedAbsentCount + lwpCount;
+    const attendanceRate = scheduledCount > 0 ? (presentCount / scheduledCount) * 100 : 0;
+    const absenteeismRate = scheduledCount > 0 ? (absentCount / scheduledCount) * 100 : 0;
+    const avgWorkingHours = presentWithDurationCount > 0 ? totalEffectiveMins / presentWithDurationCount / 60 : 0;
+    const lateArrivalRate = presentRecordsCount > 0 ? (lateCount / presentRecordsCount) * 100 : 0;
+    const earlyExitRate = presentRecordsCount > 0 ? (earlyExitCount / presentRecordsCount) * 100 : 0;
+    const totalShiftMins = presentRecordsCount * targetMins;
+    const productivityLost = totalShiftMins > 0 ? (totalLostMins / totalShiftMins) * 100 : 0;
+
+    return {
+      attendanceRate,
+      absenteeismRate,
+      avgWorkingHours,
+      lateArrivalRate,
+      earlyExitRate,
+      productivityLost,
+      shortDayCount,
+      frequentPuncherCount: empPunchMap.size,
+      presentCount,
+      absentCount,
+      lateCount,
+      earlyExitCount,
+      scheduledCount,
+      unexplainedAbsentCount,
+      plannedLeaveCount,
+      casualLeaveCount,
+      sickLeaveCount,
+      lwpCount,
+      halfDayCount,
+      productivityLostHours: totalLostMins / 60,
+    };
+  }, [filtered, holidays, grace, shiftStart, shiftEnd, thresholds.frequentPunchCount, leaveMap]);
+
+  const employeeSummaries: EmployeeSummary[] = useMemo(() => {
+    const map = new Map<string, EmployeeSummary>();
+
+    for (const r of filtered) {
+      const key = `${r.employeeCode}_${r.officeCode}`;
+      if (!map.has(key)) {
+        map.set(key, {
+          employeeCode: r.employeeCode,
+          employeeName: r.employeeName,
+          department: r.department,
+          officeCode: r.officeCode,
+          presentDays: 0,
+          absentDays: 0,
+          unmarkedAbsentDays: 0,
+          lateCount: 0,
+          earlyExitCount: 0,
+          avgHoursWorked: '0:00',
+          totalMinutes: 0,
+          worstStatus: 'green',
+          shortDayCount: 0,
+          frequentPunchDays: 0,
+          records: [],
+          plannedLeaveCount: 0, casualLeaveCount: 0, sickLeaveCount: 0, lwpCount: 0, halfDayCount: 0,
+          scheduledDays: 0,
+        });
+      }
+
+      const emp = map.get(key)!;
+      emp.records!.push(r);
+
+      const leave = leaveMap.get(leaveKey(r.employeeCode, r.date));
+
+      // Bug fix: weekly-offs and company holidays must never count toward
+      // presentDays/absentDays — this matches the `workRecords` filter that
+      // `kpi` and `computeEmployeeKPIs` already apply, but employeeSummaries
+      // previously had no such guard, so a holiday the biometric device
+      // marked "Absent" (it doesn't know about the office holiday calendar)
+      // was silently inflating this employee's absent count on the Employee
+      // Table / Employee Panel even though the same day is correctly
+      // excluded everywhere else in the dashboard. The raw record is still
+      // pushed into emp.records above so EmployeePanel's day-by-day calendar
+      // keeps showing the holiday row.
+      const isNonWorkingDay = isWeeklyOff(r.status) || (isHoliday(r.date, holidays) && !isPresent(r.status));
+
+      const effectiveLeaveType = getEffectiveLeaveType(r, leave);
+      const isFullDayLeave = effectiveLeaveType && effectiveLeaveType !== 'half_day';
+
+      if (isNonWorkingDay) {
+        // not counted as present or absent — skip straight to punch-count check below
+      } else {
+        emp.scheduledDays++;
+        if (isFullDayLeave) {
+          if (effectiveLeaveType === 'planned') emp.plannedLeaveCount++;
+          else if (effectiveLeaveType === 'casual') emp.casualLeaveCount++;
+          else if (effectiveLeaveType === 'sick') emp.sickLeaveCount++;
+          else if (effectiveLeaveType === 'lwp') { emp.lwpCount++; emp.unmarkedAbsentDays = (emp.unmarkedAbsentDays || 0) + 1; }
+          emp.absentDays++; // Employee is on leave for this day
+        } else if (effectiveLeaveType === 'half_day') {
+          emp.halfDayCount++;
+          emp.presentDays += 0.5;
+          emp.absentDays += 0.5; // Half-day on leave
+        } else if (r.isShortDay) {
+          emp.shortDayCount++;
+        } else if (isPresent(r.status)) {
+          emp.presentDays++;
+          if (isMissedPunchOut(r.status)) emp.missedPunchOutCount = (emp.missedPunchOutCount ?? 0) + 1;
+          const mins = durationToMinutes(r.duration);
+          // store effective minutes (lunch deducted only for 13:00–14:00 overlap)
+          emp.totalMinutes += effectiveMinutes(mins, r.outTime, r.inTime) ?? 0;
+          if (getLateMinutes(r, grace, shiftStart) > 0) emp.lateCount++;
+          if (getEarlyMinutes(r, grace, shiftEnd) > 0) emp.earlyExitCount++;
+        } else if (isAbsent(r.status)) {
+          emp.unmarkedAbsentDays = (emp.unmarkedAbsentDays || 0) + 1;
+          emp.absentDays++;
+        }
+      }
+
+      if ((r.punchCount ?? 1) >= thresholds.frequentPunchCount) {
+        emp.frequentPunchDays++;
+      }
+    }
+
+    return Array.from(map.values()).map((emp) => {
+      const presentRecs = (emp.records || []).filter((r) => {
+        if (!isPresent(r.status) || r.isShortDay) return false;
+        const l = leaveMap.get(leaveKey(r.employeeCode, r.date));
+        return !(l && l.leaveType !== 'half_day');
+      });
+
+      // Bug fix: previously averaged totalMinutes over ALL present days
+      // (emp.presentDays), including present-but-no-valid-duration days like
+      // "Absent (No Outpunch)" / missed punch-outs — those correctly count as
+      // present for attendance-rate purposes, but they have no real duration
+      // to measure, so including them in this denominator silently dragged
+      // the average down (each one counted as "0h worked" rather than being
+      // excluded as unmeasured), producing a lower number here than the
+      // Working Hours Distribution chart and the Employee Comparison panel
+      // (both of which already only average present days with a valid,
+      // >60-minute raw duration).
+      const presentRecsWithDuration = presentRecs.filter(r => effectiveMinutes(durationToMinutes(r.duration), r.outTime, r.inTime) !== null);
+      const totalEffectiveMinsForAvg = presentRecsWithDuration.reduce(
+        (sum, r) => sum + (effectiveMinutes(durationToMinutes(r.duration), r.outTime, r.inTime) ?? 0), 0
+      );
+
+      const avgMins = presentRecsWithDuration.length > 0
+        ? Math.round(totalEffectiveMinsForAvg / presentRecsWithDuration.length) : 0;
+      emp.avgHoursWorked = minutesToHHMM(avgMins);
+
+      // Status based on average working hours vs target shift duration.
+      // avgMins is already computed above as the average effective minutes
+      // worked per present day (excludes days with no valid duration).
+      // targetShiftMinutes() returns the full shift minus 1h lunch break.
+      const targetMins = targetShiftMinutes(shiftStart, shiftEnd);
+      const hoursPct = targetMins > 0 ? (avgMins / targetMins) * 100 : 0;
+      emp.worstStatus = colorStatus(hoursPct, thresholds.avgHoursPctGreen, thresholds.avgHoursPctAmber);
+
+      const lateMinsArr = presentRecs.map(r => getLateMinutes(r, grace, shiftStart)).filter(m => m > 0);
+      emp.avgLateMinutes = lateMinsArr.length > 0
+        ? Math.round(lateMinsArr.reduce((a, b) => a + b, 0) / lateMinsArr.length) : 0;
+
+      const earlyMinsArr = presentRecs.map(r => getEarlyMinutes(r, grace, shiftEnd)).filter(m => m > 0);
+      emp.avgEarlyExitMinutes = earlyMinsArr.length > 0
+        ? Math.round(earlyMinsArr.reduce((a, b) => a + b, 0) / earlyMinsArr.length) : 0;
+
+      const inTimes = presentRecs.map(r => timeStringToMinutes(r.inTime)).filter(m => m >= 0);
+      const outTimes = presentRecs.map(r => timeStringToMinutes(r.outTime)).filter(m => m > 0);
+      emp.latestInTime = inTimes.length > 0 ? Math.max(...inTimes) : -1;
+      emp.earliestOutTime = outTimes.length > 0 ? Math.min(...outTimes) : -1;
+      emp.avgInTime = inTimes.length > 0 ? Math.round(meanMinutes(inTimes)) : undefined;
+      emp.avgOutTime = outTimes.length > 0 ? Math.round(meanMinutes(outTimes)) : undefined;
+      emp.inTimeDeviation = stdDevMinutes(inTimes);
+      emp.outTimeDeviation = stdDevMinutes(outTimes);
+
+      emp.dayWiseLateEarly = presentRecs
+        .map(r => ({   
+          date: r.date,
+          inTime: r.inTime,
+          outTime: r.outTime,
+          lateMinutes: getLateMinutes(r, grace, shiftStart),
+          earlyMinutes: getEarlyMinutes(r, grace, shiftEnd),
+        }))
+        .filter(d => d.lateMinutes > 0 || d.earlyMinutes > 0)
+        .sort((a, b) => a.date.localeCompare(b.date));
+
+      return emp;
+    });
+  }, [filtered, holidays, grace, shiftStart, shiftEnd, thresholds.frequentPunchCount, thresholds.attendanceRateGreen, thresholds.attendanceRateAmber, leaveMap]);
+
+  const dailyTrend: DailyTrend[] = useMemo(() => {
+    const byDate = new Map<string, {
+      present: number; total: number; absentees: string[];
+      late: number; earlyExit: number; lostMins: number; shortDay: number;
+    }>();
+
+    for (const r of filtered) {
+      if (isWeeklyOff(r.status)) continue;
+      if (isHoliday(r.date, holidays) && !isPresent(r.status)) continue;
+      if (!byDate.has(r.date)) byDate.set(r.date, { present: 0, total: 0, absentees: [], late: 0, earlyExit: 0, lostMins: 0, shortDay: 0 });
+      const d = byDate.get(r.date)!;
+      const leave = leaveMap.get(leaveKey(r.employeeCode, r.date));
+      const isFullDayLeave = leave && leave.leaveType !== 'half_day';
+      // Short-days are excluded from the denominator, same as the department
+      // bar chart and department trend comparison chart (§4/§7 — this was
+      // previously inconsistent: total was incremented unconditionally here).
+      if (!r.isShortDay) d.total++;
+      if (isFullDayLeave) {
+        // On approved leave — not present, and not an unexcused absentee
+      } else if (r.isShortDay) {
+        d.shortDay++;
+      } else if (isPresent(r.status)) {
+        d.present++;
+        if (getLateMinutes(r, grace, shiftStart) > 0) d.late++;
+        if (getEarlyMinutes(r, grace, shiftEnd) > 0) d.earlyExit++;
+        d.lostMins += computeProductivityLostMinutes(r, shiftStart, shiftEnd);
+      } else if (isAbsent(r.status)) {
+        d.absentees.push(r.employeeName || r.employeeCode);
+      }
+    }
+
+    return Array.from(byDate.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, { present, total, absentees, late, earlyExit, lostMins, shortDay }]) => ({
+        date: date.slice(5),
+        rawDate: date,
+        attendanceRate: total > 0 ? Math.round((present / total) * 100) : 0,
+        presentCount: present,
+        totalCount: total,
+        absentees,
+        lateCount: late,
+        earlyExitCount: earlyExit,
+        hoursLost: lostMins / 60,
+        shortDayCount: shortDay,
+      }));
+  }, [filtered, holidays, grace, shiftStart, shiftEnd, leaveMap]);
+
+  const deptAttendance: DeptAttendance[] = useMemo(() => {
+    const byDept = new Map<string, { present: number; total: number; lostMins: number }>();
+
+    for (const r of filtered) {
+      if (isWeeklyOff(r.status) || !r.department || r.department === 'Unknown') continue;
+      if (isHoliday(r.date, holidays) && !isPresent(r.status)) continue;
+      if (!byDept.has(r.department)) byDept.set(r.department, { present: 0, total: 0, lostMins: 0 });
+      const d = byDept.get(r.department)!;
+      const leave = leaveMap.get(leaveKey(r.employeeCode, r.date));
+      const isFullDayLeave = leave && leave.leaveType !== 'half_day';
+      if (!r.isShortDay) d.total++;
+      if (!isFullDayLeave && isPresent(r.status) && !r.isShortDay) {
+        d.present++;
+        d.lostMins += computeProductivityLostMinutes(r, shiftStart, shiftEnd);
+      }
+    }
+
+    return Array.from(byDept.entries())
+      .map(([dept, { present, total, lostMins }]) => {
+        const rate = total > 0 ? Math.round((present / total) * 100) : 0;
+        return {
+          department: dept,
+          rate,
+          status: colorStatus(rate, thresholds.attendanceRateGreen, thresholds.attendanceRateAmber),
+          productivityLostDays: lostMins / targetShiftMinutes(shiftStart, shiftEnd),
+        };
+      })
+      .sort((a, b) => a.rate - b.rate);
+  }, [filtered, holidays, grace, shiftStart, shiftEnd, thresholds.attendanceRateGreen, thresholds.attendanceRateAmber, leaveMap]);
+
+  const officeAttendance: OfficeAttendance[] = useMemo(() => {
+    const source = allOfficeRecords.length > 0 ? allOfficeRecords : records;
+    const byOffice = new Map<string, { present: number; total: number }>();
+    for (const r of source) {
+      if (selectedDepartments.length > 0 && !selectedDepartments.includes(r.department)) continue;
+      if (isWeeklyOff(r.status)) continue;
+      if (isHoliday(r.date, holidays) && !isPresent(r.status)) continue;
+      if (!byOffice.has(r.officeCode)) byOffice.set(r.officeCode, { present: 0, total: 0 });
+      const d = byOffice.get(r.officeCode)!;
+      const leave = leaveMap.get(leaveKey(r.employeeCode, r.date));
+      const isFullDayLeave = leave && leave.leaveType !== 'half_day';
+      if (!r.isShortDay) d.total++;
+      if (!isFullDayLeave && isPresent(r.status) && !r.isShortDay) d.present++;
+    }
+    return Array.from(byOffice.entries())
+      .map(([office, { present, total }]) => ({
+        office, presentCount: present, scheduledCount: total,
+        rate: total > 0 ? Math.round((present / total) * 100) : 0,
+      }))
+      .sort((a, b) => a.office.localeCompare(b.office));
+  }, [allOfficeRecords, records, selectedDepartments, holidays, leaveMap]);
+
+  const hoursDistribution: HoursDistribution[] = useMemo(() => {
+    const deptMap = new Map<string, { totalMins: number; count: number }>();
+
+    for (const r of filtered) {
+      if (!isPresent(r.status) || r.isShortDay) continue;
+      const leave = leaveMap.get(leaveKey(r.employeeCode, r.date));
+      if (leave && leave.leaveType !== 'half_day') continue;
+      const rawMins = durationToMinutes(r.duration);
+      if (rawMins <= 60) continue;
+      // Lunch deducted only for the 13:00–14:00 overlap with the actual punch window
+      const { outTime, inTime } = r;
+      const effectiveMins = effectiveMinutes(rawMins, outTime, inTime) ?? 0;
+      const dept = r.department || 'Unknown';
+      if (!deptMap.has(dept)) deptMap.set(dept, { totalMins: 0, count: 0 });
+      const d = deptMap.get(dept)!;
+      d.totalMins += effectiveMins;
+      d.count++;
+    }
+
+    return Array.from(deptMap.entries()).map(([dept, { totalMins, count }]) => {
+      const avgHours = count > 0 ? totalMins / count / 60 : 0;
+      return { bin: dept, count, minHours: avgHours, avgHours, department: dept };
+    }).sort((a, b) => (a.avgHours ?? 0) - (b.avgHours ?? 0));
+  }, [filtered, leaveMap]);
+
+  const departments = useMemo(() => {
+    const set = new Set(filtered.map((r) => r.department).filter(Boolean));
+    return Array.from(set).sort();
+  }, [filtered]);
+
+  const offices = useMemo(() => {
+    const set = new Set(filtered.map((r) => r.officeCode).filter(Boolean));
+    return Array.from(set).sort();
+  }, [filtered]);
+
+  const dayDeptSnapshots = useMemo((): import('./types').DayDeptSnapshot[] => {
+    if (!isSingleDay) return [];
+    const byDept = new Map<string, { present: number; absent: number; late: number; early: number; lostMins: number; total: number }>();
+    for (const r of filtered) {
+      if (isWeeklyOff(r.status) || !r.department || r.department === 'Unknown') continue;
+      if (!byDept.has(r.department)) byDept.set(r.department, { present: 0, absent: 0, late: 0, early: 0, lostMins: 0, total: 0 });
+      const d = byDept.get(r.department)!;
+      const leave = leaveMap.get(leaveKey(r.employeeCode, r.date));
+      const isFullDayLeave = leave && leave.leaveType !== 'half_day';
+      d.total++;
+      if (isFullDayLeave) {
+        // on approved leave
+      } else if (isPresent(r.status) && !r.isShortDay) {
+        d.present++;
+        if (getLateMinutes(r, grace, shiftStart) > 0) d.late++;
+        if (getEarlyMinutes(r, grace, shiftEnd) > 0) d.early++;
+        d.lostMins += computeProductivityLostMinutes(r, shiftStart, shiftEnd);
+      } else if (isAbsent(r.status)) {
+        d.absent++;
+      }
+    }
+    return Array.from(byDept.entries())
+      .map(([department, { present, absent, late, early, lostMins, total }]) => ({
+        department, presentCount: present, absentCount: absent,
+        lateCount: late, earlyCount: early,
+        hoursLost: lostMins / 60, scheduledCount: total,
+      }))
+      .sort((a, b) => b.presentCount - a.presentCount);
+  }, [filtered, isSingleDay, grace, shiftStart, shiftEnd, leaveMap]);
+
+  const availableDates = useMemo(() => {
+    const base = records.filter((r) => {
+      if (selectedOffice !== 'ALL' && r.officeCode !== selectedOffice) return false;
+      if (selectedDepartments.length > 0 && !selectedDepartments.includes(r.department)) return false;
+      return true;
+    });
+    const set = new Set(base.map(r => r.date));
+    return Array.from(set).sort();
+  }, [records, selectedOffice, selectedDepartments]);
+
+  return {
+    kpi, employeeSummaries, dailyTrend, deptAttendance, hoursDistribution, officeAttendance,
+    departments, offices, filteredCount: filtered.length, filteredRecords: filtered,
+    availableDates, viewMode, dayDeptSnapshots,
+    // Resolved from thresholds once, here — pass these straight through to
+    // any chart/panel/export that needs late/early/productivity math so
+    // every consumer uses the exact same grace/shift window.
+    grace, shiftStart, shiftEnd,
+  };
+}
