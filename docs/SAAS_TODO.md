@@ -57,17 +57,17 @@ _P0 = blocks selling to a second customer. P1 = needed before public launch. P2 
 
 ## C. Remove Hardcoding (P0/P1)
 
-- [ ] ✔ `COMPANY_EMAIL_DOMAIN` default `wonderbiz.in`: move to per-org allowed domains
-- [ ] ✔ Offices (Mumbai, Hyderabad): per-org office table; finish the canonical-offices work from migration 0021
-- [ ] ✔ Hardcoded leave type codes (about 170 occurrences): drive from data
-- [ ] ✔ Financial-year logic (`fyStartYearForDate`) and the 25 March reset in `vercel.json`: per-org leave year and reset date
-- [ ] ✔ Probation unlock (4 months) and notice-period default (30 days): per-org or per-policy
+- [x] ✔ `COMPANY_EMAIL_DOMAIN` default `wonderbiz.in`: move to per-org allowed domains
+- [x] ✔ Offices (Mumbai, Hyderabad): per-org office table; finish the canonical-offices work from migration 0021
+- [x] ✔ Hardcoded leave type codes (about 170 occurrences): drive from data
+- [x] ✔ Financial-year logic (`fyStartYearForDate`) and the 25 March reset in `vercel.json`: per-org leave year and reset date
+- [x] ✔ Probation unlock (4 months) and notice-period default (30 days): per-org or per-policy
 - [ ] Holiday lists: per-country templates that each org can edit
 - [ ] Shift times and grace periods: per office, plus per department or shift (night and rotating shifts)
-- [ ] Replace "WonderBiz" text in UI, emails, PDFs and page titles with org name and logo
+- [x] Replace "WonderBiz" text in UI, emails, PDFs and page titles with org name and logo
 - [ ] Reminder timings, escalation rules and KPI thresholds: per org
 - [ ] Time zones: remove any India-time assumption; store a time zone per office
-- [ ] ✔ Remove hardcoded word "department" and the `Unknown` placeholder handling (see N1)
+- [x] ✔ Remove hardcoded word "department" and the `Unknown` placeholder handling (see N1)
 
 ---
 

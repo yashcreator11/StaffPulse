@@ -6,7 +6,13 @@ import {
 } from './useDashboardData';
 import { isHoliday } from './holidays';
 
-const COMPANY_NAME = 'WonderBiz Technologies';
+let CURRENT_COMPANY_NAME = 'WonderBiz Technologies';
+
+export function setExportCompanyName(name: string) {
+  if (name && name.trim()) {
+    CURRENT_COMPANY_NAME = name.trim();
+  }
+}
 
 // ────────────────────────────────────────────────────────────────────────────
 // NOTE ON CORRECTNESS: this file used to keep its own copy of the
@@ -120,7 +126,7 @@ function drawHeaderBand(doc: any, w: number, title: string, subtitle: string, co
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9);
   doc.setTextColor(...WHITE);
-  doc.text(COMPANY_NAME, w - 14, compact ? 12 : 14, { align: 'right' });
+  doc.text(CURRENT_COMPANY_NAME, w - 14, compact ? 12 : 14, { align: 'right' });
   return bandH + 8;
 }
 
@@ -181,7 +187,7 @@ function drawFootersOnAllPages(doc: any, w: number, h: number, label: string, ge
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7);
     doc.setTextColor(...SUBTLE);
-    doc.text(`${COMPANY_NAME} — Confidential`, 14, h - 6);
+    doc.text(`${CURRENT_COMPANY_NAME} — Confidential`, 14, h - 6);
     doc.text(`Period: ${label}`, w / 2, h - 6, { align: 'center' });
     doc.text(`Page ${i} of ${total}  ·  Generated ${genDate}`, w - 14, h - 6, { align: 'right' });
   }
@@ -364,7 +370,7 @@ export async function exportPDF(
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(20);
   doc.setTextColor(...WHITE);
-  doc.text(COMPANY_NAME, 14, 16);
+  doc.text(CURRENT_COMPANY_NAME, 14, 16);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(11);

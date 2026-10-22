@@ -20,4 +20,13 @@ describe('fyHelpers - Leave year cycle calculation (25-Mar to 24-Mar)', () => {
     expect(formatFYLabel(2025)).toBe('FY 2025-26');
     expect(formatFYLabel(2026)).toBe('FY 2026-27');
   });
+
+  it('supports custom per-organization leave year boundaries', () => {
+    // 1-April standard financial year (month 4, day 1)
+    expect(getFYStartYear(new Date(2026, 2, 31), 4, 1)).toBe(2025); // March 31 -> FY 2025
+    expect(getFYStartYear(new Date(2026, 3, 1), 4, 1)).toBe(2026);  // April 1 -> FY 2026
+
+    // 1-January calendar year (month 1, day 1)
+    expect(getFYStartYear(new Date(2026, 5, 15), 1, 1)).toBe(2026);
+  });
 });

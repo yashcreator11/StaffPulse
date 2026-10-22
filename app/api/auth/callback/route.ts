@@ -78,10 +78,34 @@ export async function GET(req: NextRequest) {
     return errorRedirect(origin, 'oauth_no_email');
   }
 
-  const domain = email.split('@')[1] || '';
-  const isCompanyDomain = domain === COMPANY_EMAIL_DOMAIN;
-
+  const domain = email.split('@')[1]?.toLowerCase() || '';
   const service = createServiceClient();
+
+  // Check if domain matches any active organization or defaults to COMPANY_EMAIL_DOMAIN
+  let isAllowedCompanyDomain = domain === COMPANY_EMAIL_DOMAIN;
+  let matchedOrgId = '00000000-0000-0000-0000-000000000001';
+
+  try {
+    const { data: orgs } = await service
+      .from('organizations')
+      .select('id, slug, settings')
+      .eq('status', 'active');
+
+    if (orgs) {
+      for (const org of orgs) {
+        const domains: string[] = Array.isArray((org.settings as any)?.allowed_domains)
+          ? (org.settings as any).allowed_domains.map((d: string) => d.toLowerCase())
+          : org.slug === 'wonderbiz' ? [COMPANY_EMAIL_DOMAIN] : [];
+        if (domains.includes(domain)) {
+          isAllowedCompanyDomain = true;
+          matchedOrgId = org.id;
+          break;
+        }
+      }
+    }
+  } catch {
+    // fallback to default
+  }
 
   // -------------------------------------------------------------------------
   // STEP 1: Strict email matching only (name-based linking retired)
@@ -90,7 +114,7 @@ export async function GET(req: NextRequest) {
   const { data: employee, error: lookupError } = await service
     .from('employees')
     .select(
-      'id, full_name, email, role, auth_user_id, google_id, profile_confirmed_at, must_change_password'
+      'id, org_id, full_name, email, role, auth_user_id, google_id, profile_confirmed_at, must_change_password'
     )
     .ilike('email', email)
     .maybeSingle();
@@ -105,7 +129,7 @@ export async function GET(req: NextRequest) {
   // -------------------------------------------------------------------------
 
   if (!employee) {
-    if (!isCompanyDomain) {
+    if (!isAllowedCompanyDomain) {
       await supabase.auth.signOut();
       return errorRedirect(origin, 'unauthorized_email');
     }
@@ -115,6 +139,7 @@ export async function GET(req: NextRequest) {
       .upsert(
         {
           auth_user_id: user.id,
+          org_id: matchedOrgId,
           email,
           full_name:
             user.user_metadata?.full_name ||
@@ -145,7 +170,7 @@ export async function GET(req: NextRequest) {
     employee.role === 'hr' ||
     employee.role === 'hr_super_admin';
 
-  if (!isCompanyDomain && !isAdminRole) {
+  if (!isAllowedCompanyDomain && !isAdminRole) {
     await supabase.auth.signOut();
     return errorRedirect(origin, 'unauthorized_email');
   }
