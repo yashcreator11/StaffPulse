@@ -41,16 +41,16 @@ _P0 = blocks selling to a second customer. P1 = needed before public launch. P2 
 
 ## B. Multi-Tenancy Foundation (P0)
 
-- [ ] Create an `organizations` table with membership and plan fields
-- [ ] Add `org_id NOT NULL` to every tenant table (`employees`, `attendance`, `leave_*`, `balances`, `holidays`, `notifications`, `WFH`, `FnF`, `offices`, `settings`, `uploads`, `mappings`, etc.)
-- [ ] Tenant-isolation RLS on every table using an `auth_org_id()` helper
-- [ ] ✔ Make `leave_policy_config` and `dashboard_settings` per-organization (both are single-row today)
-- [ ] Scope unique constraints per org, e.g. `(org_id, employee_code)`
-- [ ] Composite indexes starting with `org_id`
+- [x] Create an `organizations` table with membership and plan fields
+- [x] Add `org_id NOT NULL` to every tenant table (`employees`, `attendance`, `leave_*`, `balances`, `holidays`, `notifications`, `WFH`, `FnF`, `offices`, `settings`, `uploads`, `mappings`, etc.)
+- [x] Tenant-isolation RLS on every table using an `auth_org_id()` helper
+- [x] ✔ Make `leave_policy_config` and `dashboard_settings` per-organization (both are single-row today)
+- [x] Scope unique constraints per org, e.g. `(org_id, employee_code)`
+- [x] Composite indexes starting with `org_id`
 - [ ] Make every cron job loop per organization, with failure isolation per tenant
 - [ ] Make notifications, emails and exports org-aware
-- [ ] Automated cross-tenant test suite (log in as org A, try to read/write org B) that must pass in CI
-- [ ] Migration plan to move WonderBiz's existing data into organization #1 without downtime
+- [x] Automated cross-tenant test suite (log in as org A, try to read/write org B) that must pass in CI
+- [x] Migration plan to move WonderBiz's existing data into organization #1 without downtime
 - [ ] Dedicated-database option for enterprise customers (P2)
 
 ---

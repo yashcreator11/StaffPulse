@@ -1,3 +1,20 @@
+export type SubscriptionPlan = 'plan1' | 'plan2' | 'plan3';
+export type SubscriptionStatus = 'trial' | 'active' | 'past_due' | 'grace_period' | 'read_only' | 'suspended' | 'cancelled';
+
+export interface Organization {
+  id: string;
+  name: string;
+  slug: string;
+  plan: SubscriptionPlan;
+  status: SubscriptionStatus;
+  seat_limit?: number;
+  trial_ends_at?: string | null;
+  suspended_at?: string | null;
+  settings?: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface AttendanceRecord {
   date: string;
   employeeCode: string;
