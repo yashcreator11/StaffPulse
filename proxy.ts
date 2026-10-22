@@ -1,59 +1,55 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { updateSession } from '@/lib/supabase/middleware';
 
-// ── Auth model (single-login pivot) ─────────────────────────────────────
-// ONE login page (/login) authenticates against the single Supabase auth
-// pool that already backs both apps (see unified_schema.sql / PROGRESS.md
-// "Post-Sprint-2 pivot"). Session lives in one cookie ('sb-auth', see
-// lib/supabase/middleware.ts) so signing in once is enough for both the
-// Dashboard and the Leave Tracker — no more separate /leave/login.
+// ── Auth model (SaaS Gateway) ───────────────────────────────────────────
+// 1. /master/* and /api/master/* — Platform Master Console.
+//    Gated strictly by platform_admins table (independent of tenant employees).
+//    Tenant admins (including hr_super_admin) are blocked with 403.
 //
+// 2. Suspended Organizations:
+//    Blocked from accessing application routes or tenant APIs.
 //
-// Role (hr / hr_super_admin / manager / lead / employee) comes from the
-// `employees` table, keyed by `auth_user_id`. What each role can reach:
-//   - hr / hr_super_admin : full Dashboard ('/') + full Leave Tracker
-//     admin ('/leave/admin', read/write).
-//   - manager / lead       : NOT the Dashboard's upload/settings-owning
-//     HR view — app/page.tsx itself renders them a read-only, team-scoped
-//     view instead of blocking them outright (see app/page.tsx). They
-//     also get '/leave/me' (own leave), '/leave/approvals' (approve their
-//     team), and '/leave/team' (read-only team leave records).
-//   - employee              : '/leave/me' ONLY. No Dashboard access at
-//     all — bounced to '/leave/me' below, not shown any filtered view.
-//
-// Exceptions (unchanged from before this pivot):
-//   - /login itself, and /api/auth/*
-//   - the legacy unauthenticated manager share-link view
-//     (`/?view=1&token=...` — FR-10, gated by an unguessable token, not a
-//     login at all; see lib/sharedLink.ts) and its API route
-//   - everything under /leave and /api/leave — the Leave Tracker guards
-//     itself per-route (see each app/leave/**/layout.tsx and every
-//     app/api/leave/** route's own `supabase.auth.getUser()` check). It
-//     must never be gated here: doing so previously bounced a logged-out
-//     visitor to '/login' instead of letting them reach the Leave
-//     Tracker's own login, making it unreachable.
+// 3. Role-based routing:
+//    - hr / hr_super_admin : full Dashboard ('/') + full Leave Tracker admin.
+//    - manager / lead       : read-only team view + leave approvals.
+//    - employee             : '/leave/me' only.
+
 export async function proxy(req: NextRequest) {
   const pathname = req.nextUrl.pathname;
+
+  // ── Master Platform Console Routing ───────────────────────────────────
+  const isMasterRoute = pathname.startsWith('/master') || pathname.startsWith('/api/master');
+  const isMasterLogin = pathname === '/master/login';
+
+  if (isMasterRoute && !isMasterLogin) {
+    const { response, user, supabase } = await updateSession(req);
+    const wantsJson = pathname.startsWith('/api') || req.headers.get('accept')?.includes('application/json');
+
+    if (!user) {
+      if (wantsJson) {
+        return NextResponse.json({ error: 'Master authentication required' }, { status: 401 });
+      }
+      return NextResponse.redirect(new URL('/master/login', req.url));
+    }
+
+    const { data: admin } = await supabase
+      .from('platform_admins')
+      .select('id, role')
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    if (!admin) {
+      if (wantsJson) {
+        return NextResponse.json({ error: 'Forbidden: Platform admin privileges required' }, { status: 403 });
+      }
+      return NextResponse.redirect(new URL('/master/login?error=forbidden', req.url));
+    }
+
+    return response;
+  }
+
   const isLeaveRoute = pathname.startsWith('/leave') || pathname.startsWith('/api/leave');
 
-  // IMPORTANT: this must still call updateSession() — it must only skip
-  // the redirect/role-gating logic below, not the session refresh itself.
-  // updateSession() is what calls supabase.auth.getUser(), which is what
-  // actually refreshes an expiring access token and re-writes the
-  // refreshed session back into the 'sb-auth' cookie. Supabase rotates
-  // refresh tokens (each one is single-use) — every layout/route under
-  // /leave/** also calls auth.getUser() via createLeaveClient(), but
-  // Server Components (e.g. app/leave/admin/layout.tsx) are NOT allowed
-  // to write cookies, so any refresh that happens there is silently
-  // dropped (see lib/leaveSupabase/server.ts's catch block). Until this
-  // fix, /leave and /api/leave requests never got the one place that CAN
-  // persist a refreshed cookie (this middleware), so the very first
-  // token refresh anywhere in the Leave Tracker would consume the
-  // refresh token without saving the new one — the next request would
-  // then present an already-used refresh token, get rejected, and the
-  // employee would be bounced back to /leave/login. That's the "frequent
-  // logout" bug: it was never really "sessions expiring", it was the
-  // refreshed session never getting saved for this entire route tree.
   if (isLeaveRoute) {
     const { response } = await updateSession(req);
     return response;
@@ -61,10 +57,11 @@ export async function proxy(req: NextRequest) {
 
   const isSharedView = req.nextUrl.searchParams.get('view') === '1';
   const isSharedLinkApi = pathname.startsWith('/api/shared-link');
-  const isLoginPage = pathname.startsWith('/login');
+  const isLoginPage = pathname.startsWith('/login') || isMasterLogin;
   const isAuthApi = pathname.startsWith('/api/auth');
+  const isHealthApi = pathname.startsWith('/api/health');
 
-  if (isSharedView || isSharedLinkApi || isLoginPage || isAuthApi) {
+  if (isSharedView || isSharedLinkApi || isLoginPage || isAuthApi || isHealthApi) {
     const { response } = await updateSession(req);
     return response;
   }
@@ -72,9 +69,6 @@ export async function proxy(req: NextRequest) {
   const { response, user, supabase } = await updateSession(req);
 
   if (!user) {
-    // For API consumers, return JSON 401 instead of redirecting to the
-    // HTML login page — a fetch/XHR expecting JSON will otherwise get an
-    // HTML document (login page) which leads to JSON.parse errors client-side.
     const wantsJson = pathname.startsWith('/api') || req.headers.get('accept')?.includes('application/json') || req.headers.get('x-requested-with') === 'XMLHttpRequest';
     if (wantsJson) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
@@ -85,26 +79,28 @@ export async function proxy(req: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // Role check — plain `employee` role never sees the Dashboard,
-  // full stop — sent to their own leave page instead. Every other role
-  // (hr / hr_super_admin / manager / lead) is let through; app/page.tsx
-  // decides what they actually get to see (full HR view vs. read-only
-  // team-scoped view).
-  //
-  // PERF: Skip the employees table query when not needed:
-  // - /api/* routes do not need this page redirect (and must not return HTML redirects)
-  // - RSC prefetch requests do not need to execute the query ahead of time
-  // Only the root dashboard page ('/') navigation needs this check.
+  // ── Suspended Organization & Role Check ──────────────────────────────
   const isPrefetch = req.headers.get('next-router-prefetch') === '1' || req.headers.get('purpose') === 'prefetch';
 
-  if (pathname === '/' && !isPrefetch) {
+  if (!isPrefetch) {
     const { data: employee } = await supabase
       .from('employees')
-      .select('role')
+      .select('role, org_id, organizations!employees_org_id_fkey(status)')
       .eq('auth_user_id', user.id)
       .maybeSingle();
 
-    if (employee?.role === 'employee') {
+    // Block suspended organizations immediately
+    const orgStatus = (employee as any)?.organizations?.status;
+    if (orgStatus === 'suspended') {
+      const wantsJson = pathname.startsWith('/api') || req.headers.get('accept')?.includes('application/json');
+      if (wantsJson) {
+        return NextResponse.json({ error: 'Organization suspended. Please contact platform support.' }, { status: 403 });
+      }
+      return NextResponse.redirect(new URL('/login?error=org_suspended', req.url));
+    }
+
+    // Role check — plain `employee` role never sees the root Dashboard
+    if (pathname === '/' && employee?.role === 'employee') {
       return NextResponse.redirect(new URL('/leave/me', req.url));
     }
   }

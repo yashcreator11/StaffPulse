@@ -127,7 +127,7 @@ _P0 = blocks selling to a second customer. P1 = needed before public launch. P2 
 - [ ] Opening-balance import
 - [ ] Demo mode with sample data so prospects can try the dashboard first
 - [ ] Org settings page: branding, time zone, language, data retention
-- [ ] Platform super-admin console: list tenants, usage, plan, suspend, controlled support access with an audit trail
+- [x] Platform super-admin console: list tenants, usage, plan, suspend, controlled support access with an audit trail
 - [ ] In-app help, tooltips and an empty state on every screen
 - [ ] Move `scripts/bulk-create-employee-auth.mjs` out of the customer path or turn it into an admin feature
 
@@ -267,13 +267,13 @@ _Build after Section B (multi-tenancy). This is the control room for your busine
 
 ### Checklist
 
-- [ ] `platform_admins` table with roles (owner, support, finance, read-only), kept separate from `employees` (P0)
-- [ ] Separate login and route area (/master/* with its own gate in proxy.ts); MFA required for every platform admin; optional IP allowlist (P0)
-- [ ] Platform-admin check on every master route and API, with tests that tenant admins (including hr_super_admin) get 403 (P0)
-- [ ] Append-only `platform_audit_log` for every master action (P0)
-- [ ] Organizations list: name, plan, status (trial, active, past due, suspended, cancelled), signup date, country, employee count against plan limit, last login, last attendance upload; search, filters, sorting (P1)
-- [ ] Organization detail page: admin contacts, plan and billing status, trial end date, usage over time, configuration summary (offices, groups, leave policy), health (failed imports, failed cron jobs, errors) (P1)
-- [ ] Actions: suspend and reactivate (typed confirmation), extend trial, change plan or limits, resend admin invite, reset admin access (P1)
+- [x] `platform_admins` table with roles (owner, support, finance, read-only), kept separate from `employees` (P0)
+- [x] Separate login and route area (/master/* with its own gate in proxy.ts); MFA required for every platform admin; optional IP allowlist (P0)
+- [x] Platform-admin check on every master route and API, with tests that tenant admins (including hr_super_admin) get 403 (P0)
+- [x] Append-only `platform_audit_log` for every master action (P0)
+- [x] Organizations list: name, plan, status (trial, active, past due, suspended, cancelled), signup date, country, employee count against plan limit, last login, last attendance upload; search, filters, sorting (P1)
+- [x] Organization detail page: admin contacts, plan and billing status, trial end date, usage over time, configuration summary (offices, groups, leave policy), health (failed imports, failed cron jobs, errors) (P1)
+- [x] Actions: suspend and reactivate (typed confirmation), extend trial, change plan or limits, resend admin invite, reset admin access (P1)
 - [ ] onboarding_progress tracking and onboarding funnel view (P1)
 - [ ] Nightly usage_snapshots job so the master page reads small summary rows and never scans raw customer data (P1)
 - [ ] Support notes per organization (org_notes) (P1)
