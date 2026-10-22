@@ -30,16 +30,19 @@ export function DeptAttendanceChart({ data, allRecords, selectedDepts, highlight
   const __tc = useThemeColors();
   const [manualDrill, setManualDrill] = useState<string | null>(null);
   const [sortMode, setSortMode] = useState<SortMode>('default');
+  const validData = useMemo(() => {
+    return data.filter(d => d.department && d.department.trim() !== '' && d.department.toLowerCase() !== 'unknown');
+  }, [data]);
   const drillDept = selectedDepts?.length === 1 ? selectedDepts[0] : manualDrill;
-  const avgRate = data.length > 0 ? data.reduce((s, d) => s + d.rate, 0) / data.length : 0;
+  const avgRate = validData.length > 0 ? validData.reduce((s, d) => s + d.rate, 0) / validData.length : 0;
 
   const sortedData = useMemo(() => {
-    const d = [...data];
+    const d = [...validData];
     if (sortMode === 'az') return d.sort((a, b) => a.department.localeCompare(b.department));
     if (sortMode === 'worst') return d.sort((a, b) => a.rate - b.rate);
     if (sortMode === 'best') return d.sort((a, b) => b.rate - a.rate);
     return d.sort((a, b) => a.rate - b.rate);
-  }, [data, sortMode]);
+  }, [validData, sortMode]);
 
   const drillData = useMemo(() => {
     if (!drillDept) return [];
@@ -131,6 +134,10 @@ export function DeptAttendanceChart({ data, allRecords, selectedDepts, highlight
           )}
       </div>
     );
+  }
+
+  if (validData.length === 0 && !drillDept) {
+    return null;
   }
 
   return (
@@ -274,14 +281,15 @@ export function DeptProductivityChart({
   const __tc = useThemeColors();
   const [internalDrill, setInternalDrill] = useState<string | null>(null);
   const [sortMode, setSortMode] = useState<SortMode>('default');
-  const safeRecords = allRecords ?? [];
 
   const drillDept = selectedDepts?.length === 1
     ? selectedDepts[0]
     : internalDrill ?? (externalDrillDept ?? null);
 
   const chartData = useMemo(() => {
-    const d = data.map(d => ({ department: d.department, daysLost: +(d.productivityLostDays ?? 0).toFixed(2) }));
+    const d = data
+      .filter(item => item.department && item.department.trim() !== '' && item.department.toLowerCase() !== 'unknown')
+      .map(d => ({ department: d.department, daysLost: +(d.productivityLostDays ?? 0).toFixed(2) }));
     if (sortMode === 'az') return d.sort((a, b) => a.department.localeCompare(b.department));
     if (sortMode === 'worst') return d.sort((a, b) => b.daysLost - a.daysLost);
     if (sortMode === 'best') return d.sort((a, b) => a.daysLost - b.daysLost);
@@ -307,6 +315,7 @@ export function DeptProductivityChart({
   }
 
   const drillData = useMemo(() => {
+    const safeRecords = allRecords ?? [];
     if (!drillDept || safeRecords.length === 0) return [];
     const map = new Map<string, { name: string; code: string; lostMins: number; presentDays: number; daysWithDuration: number; effectiveMins: number }>();
     for (const r of safeRecords) {
@@ -331,7 +340,7 @@ export function DeptProductivityChart({
     if (sortMode === 'az') return rows.sort((a, b) => a.name.localeCompare(b.name));
     if (sortMode === 'best') return rows.sort((a, b) => a.daysLost - b.daysLost || a.name.localeCompare(b.name));
     return rows.sort((a, b) => b.daysLost - a.daysLost || a.name.localeCompare(b.name));
-  }, [drillDept, safeRecords, sortMode, shiftStartMinutes, shiftEndMinutes]);
+  }, [drillDept, allRecords, sortMode, shiftStartMinutes, shiftEndMinutes]);
 
   const drillLayout = useEntityChartLayout(drillData, { getLabel: (r) => r.name });
 
@@ -389,6 +398,10 @@ export function DeptProductivityChart({
           )}
       </div>
     );
+  }
+
+  if (chartData.length === 0 && !drillDept) {
+    return null;
   }
 
   return (

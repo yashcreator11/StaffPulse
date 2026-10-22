@@ -4,6 +4,7 @@ import { DEFAULT_THRESHOLDS } from '@/lib/settings';
 import { targetShiftMinutes } from '@/lib/useDashboardData';
 import { minutesToHHMM } from '@/lib/parseCSV';
 import InfoTooltip from './InfoTooltip';
+import { Sun, Coffee } from 'lucide-react';
 
 interface KPICardsProps {
   kpi: KPIData;
@@ -79,6 +80,47 @@ interface CardDef {
 export default function KPICards({ kpi, thresholds = DEFAULT_THRESHOLDS, viewMode = 'monthly', onCardClick, activeFilter }: KPICardsProps) {
   const t = thresholds;
   const isDay = viewMode === 'single_day';
+
+  // Section N4: Holiday / Weekly Off state instead of 0% attendance
+  if (isDay && kpi.scheduledCount === 0) {
+    return (
+      <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 dark:bg-amber-500/5 p-5 shadow-sm">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5">
+            <div className="w-11 h-11 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0 shadow-sm">
+              <Sun className="w-6 h-6" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm sm:text-base font-bold text-[var(--text-primary)]">
+                  Holiday / Weekly Off — No Attendance Expected
+                </h3>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-500/20 text-amber-700 dark:text-amber-300">
+                  Non-Working Day
+                </span>
+              </div>
+              <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                0 scheduled shifts for this date. Attendance expectations are waived; no absenteeism or late penalties apply.
+              </p>
+            </div>
+          </div>
+          {kpi.presentCount > 0 ? (
+            <div className="shrink-0 text-right bg-[var(--bg-card)] px-3.5 py-2 rounded-xl border border-[var(--border)]">
+              <span className="text-xs text-[var(--text-muted)] block">Voluntary / Overtime</span>
+              <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
+                {Math.round(kpi.presentCount)} employee(s) punched in
+              </span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5 text-xs text-[var(--text-muted)] px-3 py-1.5 rounded-lg bg-[var(--bg-card)] border border-[var(--border)]">
+              <Coffee className="w-4 h-4 text-amber-500" />
+              <span>Office Closed</span>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   const targetMinutes = targetShiftMinutes(t.shiftStartMinutes, t.shiftEndMinutes);
   const targetHours = targetMinutes / 60;

@@ -57,9 +57,14 @@ export function DayDeptAttendanceChart({
   leaveMap?: Map<string, LeaveRecord>;
 } & DayNavProps) {
   const __tc = useThemeColors();
+  const validData = data.filter(d => d.department && d.department.trim() !== '' && d.department.toLowerCase() !== 'unknown');
   const [drillDept, setDrillDept] = useState<string | null>(null);
-  const singleDept = data.length === 1 ? data[0].department : null;
+  const singleDept = validData.length === 1 ? validData[0].department : null;
   const activeDept = singleDept ?? drillDept;
+
+  if (validData.length === 0 && !activeDept) {
+    return null;
+  }
 
   if (activeDept && allRecords) {
     const deptRecords = allRecords.filter(r => r.department === activeDept);
@@ -167,9 +172,14 @@ export function DayDeptLateChart({
   shiftEndMinutes?: number;
 } & DayNavProps) {
   const __tc = useThemeColors();
+  const validData = data.filter(d => d.department && d.department.trim() !== '' && d.department.toLowerCase() !== 'unknown');
   const [drillDept, setDrillDept] = useState<string | null>(null);
-  const singleDept = data.length === 1 ? data[0].department : null;
+  const singleDept = validData.length === 1 ? validData[0].department : null;
   const activeDept = singleDept ?? drillDept;
+
+  if (validData.length === 0 && !activeDept) {
+    return null;
+  }
 
   if (activeDept && allRecords) {
     const lateRecords = allRecords.filter(r =>
@@ -264,9 +274,14 @@ export function DayDeptProductivityChart({
   shiftEndMinutes?: number;
 } & DayNavProps) {
   const __tc = useThemeColors();
+  const validData = data.filter(d => d.department && d.department.trim() !== '' && d.department.toLowerCase() !== 'unknown');
   const [drillDept, setDrillDept] = useState<string | null>(null);
-  const singleDept = data.length === 1 ? data[0].department : null;
+  const singleDept = validData.length === 1 ? validData[0].department : null;
   const activeDept = singleDept ?? drillDept;
+
+  if (validData.length === 0 && !activeDept) {
+    return null;
+  }
 
   if (activeDept && allRecords) {
     const empData = allRecords
@@ -281,7 +296,7 @@ export function DayDeptProductivityChart({
               <ArrowLeft className="w-3.5 h-3.5" /> Back
             </button>
           )}
-          <h3 className="text-white font-semibold text-sm">{activeDept} — Productivity Lost</h3>
+          <h3 className="text-[var(--text-primary)] font-semibold text-sm">{activeDept} — Productivity Lost</h3>
           <span className="text-slate-500 text-xs ml-auto">
             {minutesToHHMM(empData.reduce((s, e) => s + e.lostM, 0))} total lost
           </span>

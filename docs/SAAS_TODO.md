@@ -227,10 +227,10 @@ _P0 = blocks selling to a second customer. P1 = needed before public launch. P2 
 
 ### N2. Organizations with No Teams (P0/P1)
 
-- [ ] ✔ Stop department widgets showing empty or as a single "Unknown" bar (blank and "Unknown" departments are skipped in the charts today)
-- [ ] Hide department filter, department chart, department trend, comparison mode and team snapshot when no group data exists
-- [ ] Promote the employee table, individual comparison, late and absent rankings and office comparison instead
-- [ ] Clear message when the upload has no department column
+- [x] ✔ Stop department widgets showing empty or as a single "Unknown" bar (blank and "Unknown" departments are skipped in the charts today)
+- [x] Hide department filter, department chart, department trend, comparison mode and team snapshot when no group data exists
+- [x] Promote the employee table, individual comparison, late and absent rankings and office comparison instead
+- [x] Clear message when the upload has no department column
 - [ ] Ways to add teams later: import with employees, by reporting manager, or a mapping step
 
 ### N3. Organizations with Many Teams (P1; performance P2)
@@ -247,10 +247,10 @@ _P0 = blocks selling to a second customer. P1 = needed before public launch. P2 
 
 ### N4. Single-Day Dashboard (P1; live data P2)
 
-- [ ] ✔ Keep the existing single-day mode, and make view mode an explicit toggle instead of a side effect of filters
-- [ ] Date picker with Today, Yesterday and Previous working day shortcuts
+- [x] ✔ Keep the existing single-day mode, and make view mode an explicit toggle instead of a side effect of filters
+- [x] Date picker with Today, Yesterday and Previous working day shortcuts
 - [ ] Per-org default landing view (Today, Month or Comparison)
-- [ ] "Holiday / weekly off, no attendance expected" state instead of 0% attendance
+- [x] "Holiday / weekly off, no attendance expected" state instead of 0% attendance
 - [ ] Day view content: expected vs present, absent without leave, on leave, WFH, late arrivals with times, early departures, missed punches, team snapshot, optional arrival timeline
 - [ ] Live "today" data via the device sync API (see E); until then, show when data was last updated
 

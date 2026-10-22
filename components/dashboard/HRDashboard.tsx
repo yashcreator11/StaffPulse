@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter, useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import { CheckCircle, Calendar, X as XIcon } from 'lucide-react';
+import { CheckCircle, Calendar, X as XIcon, Info } from 'lucide-react';
 import {
   AttendanceRecord,
   ColumnMapping,
@@ -715,14 +715,26 @@ export default function HRDashboard() {
   // dashboard behind it to show.
   const hasDashboardData = uploadedMonths.length > 0;
 
+  // Section N2: Organizations with no teams / departments
+  const hasDepartments = useMemo(() => {
+    return (
+      departments.length > 0 &&
+      departments.some(
+        (d) => d && d.trim() !== '' && d.toLowerCase() !== 'unknown' && d.toLowerCase() !== 'default'
+      )
+    );
+  }, [departments]);
+
   // Nav sections only exist once there's an actual dashboard rendered —
   // before any data exists there's nothing to scroll to yet. The
   // Comparison panels only render outside single-day view (see below).
   const availableSections: DashboardSectionId[] = !hasDashboardData
     ? []
-    : viewMode === 'single_day'
-      ? ['overview', 'employees', 'departments']
-      : ['overview', 'employees', 'departments', 'comparison'];
+    : !hasDepartments
+      ? ['overview', 'employees']
+      : viewMode === 'single_day'
+        ? ['overview', 'employees', 'departments']
+        : ['overview', 'employees', 'departments', 'comparison'];
 
   return (
     <DashboardShell
@@ -787,89 +799,188 @@ export default function HRDashboard() {
                   </p>
                 </div>
 
-                {/* Quick Range Presets */}
+                {/* Explicit View Mode Toggle & Presets (Section N4) */}
                 {allAvailableDates.length > 0 && (
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <button
-                      onClick={() => { setDateFrom(null); setDateTo(null); }}
-                      className={`px-3 py-1 rounded-lg text-xs font-medium transition-all ${!dateFrom && !dateTo
-                        ? 'bg-[var(--accent)] text-white shadow-sm font-semibold'
-                        : 'bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <div className="flex items-center bg-[var(--bg-elevated)] p-1 rounded-xl border border-[var(--border)] text-xs">
+                      <button
+                        onClick={() => {
+                          setDateFrom(null);
+                          setDateTo(null);
+                        }}
+                        className={`px-3 py-1 rounded-lg font-medium transition-all ${
+                          viewMode !== 'single_day'
+                            ? 'bg-[var(--accent)] text-white shadow-sm font-semibold'
+                            : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
                         }`}
-                    >
-                      Default Month
-                    </button>
-                    <button
-                      onClick={() => {
-                        if (minAvailableDate && maxAvailableDate) {
-                          setDateFrom(minAvailableDate);
-                          setDateTo(maxAvailableDate);
-                        }
-                      }}
-                      className={`px-3 py-1 rounded-lg text-xs font-medium transition-all ${dateFrom === minAvailableDate && dateTo === maxAvailableDate
-                        ? 'bg-[var(--accent)] text-white shadow-sm font-semibold'
-                        : 'bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+                      >
+                        Month View
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (maxAvailableDate) {
+                            setDateFrom(maxAvailableDate);
+                            setDateTo(maxAvailableDate);
+                          }
+                        }}
+                        className={`px-3 py-1 rounded-lg font-medium transition-all ${
+                          viewMode === 'single_day'
+                            ? 'bg-blue-600 text-white shadow-sm font-semibold'
+                            : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
                         }`}
-                    >
-                      All Uploaded ({allAvailableDates.length}d)
-                    </button>
+                      >
+                        Day View
+                      </button>
+                    </div>
+
+                    {/* Presets based on current mode */}
+                    {viewMode !== 'single_day' ? (
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => { setDateFrom(null); setDateTo(null); }}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${!dateFrom && !dateTo
+                            ? 'bg-[var(--bg-surface)] text-[var(--accent)] border border-[var(--accent)] font-semibold'
+                            : 'bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+                            }`}
+                        >
+                          Default Month
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (minAvailableDate && maxAvailableDate) {
+                              setDateFrom(minAvailableDate);
+                              setDateTo(maxAvailableDate);
+                            }
+                          }}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${dateFrom === minAvailableDate && dateTo === maxAvailableDate
+                            ? 'bg-[var(--bg-surface)] text-[var(--accent)] border border-[var(--accent)] font-semibold'
+                            : 'bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+                            }`}
+                        >
+                          All Uploaded ({allAvailableDates.length}d)
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => {
+                            if (maxAvailableDate) {
+                              setDateFrom(maxAvailableDate);
+                              setDateTo(maxAvailableDate);
+                            }
+                          }}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${dateFrom === maxAvailableDate
+                            ? 'bg-[var(--bg-surface)] text-blue-600 dark:text-blue-400 border border-blue-500 font-semibold'
+                            : 'bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+                            }`}
+                        >
+                          Latest Day
+                        </button>
+                        {allAvailableDates.length >= 2 && (
+                          <button
+                            onClick={() => {
+                              const prev = allAvailableDates[allAvailableDates.length - 2];
+                              setDateFrom(prev);
+                              setDateTo(prev);
+                            }}
+                            className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${dateFrom === allAvailableDates[allAvailableDates.length - 2]
+                              ? 'bg-[var(--bg-surface)] text-blue-600 dark:text-blue-400 border border-blue-500 font-semibold'
+                              : 'bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+                              }`}
+                          >
+                            Previous Day
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
 
+              {/* Section N2: Clear notice when upload has no department column */}
+              {!hasDepartments && (
+                <div className="flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-blue-500/10 border border-blue-500/20 text-xs text-blue-600 dark:text-blue-300">
+                  <Info className="w-4 h-4 shrink-0 text-blue-500" />
+                  <span>No department grouping found in upload. Dashboard is organized company-wide by employee.</span>
+                </div>
+              )}
+
               {/* ── Filter Controls Row ────────────────────────────────── */}
               <div className="flex flex-wrap items-center gap-3">
-                {/* Date range picker */}
+                {/* Date picker (Single Day vs Range) */}
                 {allAvailableDates.length > 0 && (
-                  <div className="flex items-center gap-2 bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl px-3 py-2 shadow-inner">
-                    <Calendar className="w-4 h-4 text-[var(--accent)] flex-shrink-0" />
-                    <span className="text-[var(--text-muted)] text-xs font-medium">From:</span>
-                    <input
-                      type="date"
-                      value={dateFrom ?? impliedRange?.min ?? ''}
-                      min={minAvailableDate}
-                      max={effectiveDateTo ?? maxAvailableDate}
-                      onChange={e => {
-                        const v = e.target.value || null;
-                        if (v && (v < minAvailableDate! || v > maxAvailableDate!)) {
-                          showToast('error', `No data outside ${minAvailableDate} → ${maxAvailableDate}.`);
-                          return;
-                        }
-                        setDateFrom(v);
-                        if (v) setDateTo(effectiveDateTo ?? v);
-                      }}
-                      className={`bg-transparent text-xs font-medium focus:outline-none w-28 sm:w-32 ${dateFrom ? 'text-[var(--text-primary)]' : 'text-[var(--text-muted)]'}`}
-                      title={!dateFrom ? 'Auto-filled to match current month data' : undefined}
-                    />
-                    <span className="text-[var(--border)] text-xs font-bold">|</span>
-                    <span className="text-[var(--text-muted)] text-xs font-medium">To:</span>
-                    <input
-                      type="date"
-                      value={dateTo ?? impliedRange?.max ?? ''}
-                      min={effectiveDateFrom ?? minAvailableDate}
-                      max={maxAvailableDate}
-                      onChange={e => {
-                        const v = e.target.value || null;
-                        if (v && (v < minAvailableDate! || v > maxAvailableDate!)) {
-                          showToast('error', `No data outside ${minAvailableDate} → ${maxAvailableDate}.`);
-                          return;
-                        }
-                        setDateTo(v);
-                        if (v) setDateFrom(effectiveDateFrom ?? v);
-                      }}
-                      className={`bg-transparent text-xs font-medium focus:outline-none w-28 sm:w-32 ${dateTo ? 'text-[var(--text-primary)]' : 'text-[var(--text-muted)]'}`}
-                      title={!dateTo ? 'Auto-filled to match current month data' : undefined}
-                    />
-                    {(dateFrom || dateTo) && (
-                      <button
-                        onClick={() => { setDateFrom(null); setDateTo(null); }}
-                        className="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors ml-1 p-0.5 rounded hover:bg-[var(--bg-elevated)]"
-                        title="Clear date range"
-                      >
-                        <XIcon className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                  </div>
+                  viewMode === 'single_day' ? (
+                    <div className="flex items-center gap-2 bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl px-3 py-2 shadow-inner">
+                      <Calendar className="w-4 h-4 text-blue-500 flex-shrink-0" />
+                      <span className="text-[var(--text-muted)] text-xs font-medium">Selected Day:</span>
+                      <input
+                        type="date"
+                        value={dateFrom ?? maxAvailableDate ?? ''}
+                        min={minAvailableDate}
+                        max={maxAvailableDate}
+                        onChange={e => {
+                          const v = e.target.value || null;
+                          if (v && (v < minAvailableDate! || v > maxAvailableDate!)) {
+                            showToast('error', `No data outside ${minAvailableDate} → ${maxAvailableDate}.`);
+                            return;
+                          }
+                          setDateFrom(v);
+                          setDateTo(v);
+                        }}
+                        className="bg-transparent text-xs font-medium focus:outline-none w-28 sm:w-32 text-[var(--text-primary)]"
+                      />
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl px-3 py-2 shadow-inner">
+                      <Calendar className="w-4 h-4 text-[var(--accent)] flex-shrink-0" />
+                      <span className="text-[var(--text-muted)] text-xs font-medium">From:</span>
+                      <input
+                        type="date"
+                        value={dateFrom ?? impliedRange?.min ?? ''}
+                        min={minAvailableDate}
+                        max={effectiveDateTo ?? maxAvailableDate}
+                        onChange={e => {
+                          const v = e.target.value || null;
+                          if (v && (v < minAvailableDate! || v > maxAvailableDate!)) {
+                            showToast('error', `No data outside ${minAvailableDate} → ${maxAvailableDate}.`);
+                            return;
+                          }
+                          setDateFrom(v);
+                          if (v) setDateTo(effectiveDateTo ?? v);
+                        }}
+                        className={`bg-transparent text-xs font-medium focus:outline-none w-28 sm:w-32 ${dateFrom ? 'text-[var(--text-primary)]' : 'text-[var(--text-muted)]'}`}
+                        title={!dateFrom ? 'Auto-filled to match current month data' : undefined}
+                      />
+                      <span className="text-[var(--border)] text-xs font-bold">|</span>
+                      <span className="text-[var(--text-muted)] text-xs font-medium">To:</span>
+                      <input
+                        type="date"
+                        value={dateTo ?? impliedRange?.max ?? ''}
+                        min={effectiveDateFrom ?? minAvailableDate}
+                        max={maxAvailableDate}
+                        onChange={e => {
+                          const v = e.target.value || null;
+                          if (v && (v < minAvailableDate! || v > maxAvailableDate!)) {
+                            showToast('error', `No data outside ${minAvailableDate} → ${maxAvailableDate}.`);
+                            return;
+                          }
+                          setDateTo(v);
+                          if (v) setDateFrom(effectiveDateFrom ?? v);
+                        }}
+                        className={`bg-transparent text-xs font-medium focus:outline-none w-28 sm:w-32 ${dateTo ? 'text-[var(--text-primary)]' : 'text-[var(--text-muted)]'}`}
+                        title={!dateTo ? 'Auto-filled to match current month data' : undefined}
+                      />
+                      {(dateFrom || dateTo) && (
+                        <button
+                          onClick={() => { setDateFrom(null); setDateTo(null); }}
+                          className="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors ml-1 p-0.5 rounded hover:bg-[var(--bg-elevated)]"
+                          title="Clear date range"
+                        >
+                          <XIcon className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  )
                 )}
 
                 {/* Office pills */}
@@ -888,32 +999,34 @@ export default function HRDashboard() {
                   ))}
                 </div>
 
-                {/* Department pills rail */}
-                <div className="flex flex-wrap items-center gap-1.5 flex-1 min-w-[200px]">
-                  {departments.map(d => {
-                    const isSelected = selectedDepts.includes(d);
-                    return (
+                {/* Department pills rail (Section N2: only if organization has departments) */}
+                {hasDepartments && (
+                  <div className="flex flex-wrap items-center gap-1.5 flex-1 min-w-[200px]">
+                    {departments.map(d => {
+                      const isSelected = selectedDepts.includes(d);
+                      return (
+                        <button
+                          key={d}
+                          onClick={() => toggleDept(d)}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${isSelected
+                            ? 'bg-violet-600 text-white shadow-sm font-semibold'
+                            : 'bg-[var(--bg-surface)] border border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:border-violet-500/40'
+                            }`}
+                        >
+                          {d}
+                        </button>
+                      );
+                    })}
+                    {selectedDepts.length > 0 && (
                       <button
-                        key={d}
-                        onClick={() => toggleDept(d)}
-                        className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${isSelected
-                          ? 'bg-violet-600 text-white shadow-sm font-semibold'
-                          : 'bg-[var(--bg-surface)] border border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:border-violet-500/40'
-                          }`}
+                        onClick={clearDepts}
+                        className="px-2.5 py-1 rounded-lg text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)] transition-colors font-medium underline"
                       >
-                        {d}
+                        Clear ({selectedDepts.length})
                       </button>
-                    );
-                  })}
-                  {selectedDepts.length > 0 && (
-                    <button
-                      onClick={clearDepts}
-                      className="px-2.5 py-1 rounded-lg text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)] transition-colors font-medium underline"
-                    >
-                      Clear ({selectedDepts.length})
-                    </button>
-                  )}
-                </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -970,47 +1083,49 @@ export default function HRDashboard() {
             {/* ── SINGLE DAY VIEW ─────────────────────────────────────────── */}
             {viewMode === 'single_day' && (
               <>
-                <div id="section-departments" className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
-                  <DayDeptAttendanceChart
-                    data={dayDeptSnapshots}
-                    onDeptClick={(dept) => focusDept(dept)}
-                    allRecords={filteredRecords}
-                    graceMinutes={thresholds.graceMinutes}
-                    shiftStartMinutes={thresholds.shiftStartMinutes}
-                    shiftEndMinutes={thresholds.shiftEndMinutes}
-                    leaveMap={leaveMap}
-                    date={dateFrom ?? undefined}
-                    onPrevDay={() => stepDay(-1)}
-                    onNextDay={() => stepDay(1)}
-                    canGoPrev={canGoPrevDay}
-                    canGoNext={canGoNextDay}
-                  />
-                  <DayDeptLateChart
-                    data={dayDeptSnapshots}
-                    onDeptClick={(dept) => focusDept(dept)}
-                    allRecords={filteredRecords}
-                    graceMinutes={thresholds.graceMinutes}
-                    shiftStartMinutes={thresholds.shiftStartMinutes}
-                    shiftEndMinutes={thresholds.shiftEndMinutes}
-                    date={dateFrom ?? undefined}
-                    onPrevDay={() => stepDay(-1)}
-                    onNextDay={() => stepDay(1)}
-                    canGoPrev={canGoPrevDay}
-                    canGoNext={canGoNextDay}
-                  />
-                  <DayDeptProductivityChart
-                    data={dayDeptSnapshots}
-                    onDeptClick={(dept) => focusDept(dept)}
-                    allRecords={filteredRecords}
-                    shiftStartMinutes={thresholds.shiftStartMinutes}
-                    shiftEndMinutes={thresholds.shiftEndMinutes}
-                    date={dateFrom ?? undefined}
-                    onPrevDay={() => stepDay(-1)}
-                    onNextDay={() => stepDay(1)}
-                    canGoPrev={canGoPrevDay}
-                    canGoNext={canGoNextDay}
-                  />
-                </div>
+                {hasDepartments && (
+                  <div id="section-departments" className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
+                    <DayDeptAttendanceChart
+                      data={dayDeptSnapshots}
+                      onDeptClick={(dept) => focusDept(dept)}
+                      allRecords={filteredRecords}
+                      graceMinutes={thresholds.graceMinutes}
+                      shiftStartMinutes={thresholds.shiftStartMinutes}
+                      shiftEndMinutes={thresholds.shiftEndMinutes}
+                      leaveMap={leaveMap}
+                      date={dateFrom ?? undefined}
+                      onPrevDay={() => stepDay(-1)}
+                      onNextDay={() => stepDay(1)}
+                      canGoPrev={canGoPrevDay}
+                      canGoNext={canGoNextDay}
+                    />
+                    <DayDeptLateChart
+                      data={dayDeptSnapshots}
+                      onDeptClick={(dept) => focusDept(dept)}
+                      allRecords={filteredRecords}
+                      graceMinutes={thresholds.graceMinutes}
+                      shiftStartMinutes={thresholds.shiftStartMinutes}
+                      shiftEndMinutes={thresholds.shiftEndMinutes}
+                      date={dateFrom ?? undefined}
+                      onPrevDay={() => stepDay(-1)}
+                      onNextDay={() => stepDay(1)}
+                      canGoPrev={canGoPrevDay}
+                      canGoNext={canGoNextDay}
+                    />
+                    <DayDeptProductivityChart
+                      data={dayDeptSnapshots}
+                      onDeptClick={(dept) => focusDept(dept)}
+                      allRecords={filteredRecords}
+                      shiftStartMinutes={thresholds.shiftStartMinutes}
+                      shiftEndMinutes={thresholds.shiftEndMinutes}
+                      date={dateFrom ?? undefined}
+                      onPrevDay={() => stepDay(-1)}
+                      onNextDay={() => stepDay(1)}
+                      canGoPrev={canGoPrevDay}
+                      canGoNext={canGoNextDay}
+                    />
+                  </div>
+                )}
                 <div id="section-employees" className="bg-[var(--bg-elevated)]/30 rounded-xl border border-[var(--border)] p-4">
                   <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
                     <h2 className="text-[var(--text-primary)] font-semibold text-sm">
@@ -1065,28 +1180,30 @@ export default function HRDashboard() {
                 {/* Dept Attendance + Productivity Lost side by side, linked drill.
                     In comparison mode, show every department (dimming those not
                     selected) rather than only the selected ones. */}
-                <div id="section-departments" className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
-                  <DeptAttendanceChart
-                    data={isComparison ? allDeptAttendance : deptAttendance}
-                    allRecords={isComparison ? allDeptRecords : filteredRecords}
-                    selectedDepts={selectedDepts}
-                    highlightDepts={isComparison ? selectedDepts : undefined}
-                    onDeptClick={(dept) => toggleDept(dept)}
-                    onDeptDrillChange={(dept) => setDeptDrillSync(dept)}
-                  />
-                  <DeptProductivityChart
-                    data={isComparison ? allDeptAttendance : deptAttendance}
-                    allRecords={isComparison ? allDeptRecords : filteredRecords}
-                    selectedDepts={selectedDepts}
-                    highlightDepts={isComparison ? selectedDepts : undefined}
-                    externalDrillDept={deptDrillSync}
-                    onDrillBack={() => setDeptDrillSync(null)}
-                    onDeptDrillChange={(dept) => setDeptDrillSync(dept)}
-                    onDeptClick={(dept) => toggleDept(dept)}
-                    shiftStartMinutes={thresholds.shiftStartMinutes}
-                    shiftEndMinutes={thresholds.shiftEndMinutes}
-                  />
-                </div>
+                {hasDepartments && (
+                  <div id="section-departments" className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+                    <DeptAttendanceChart
+                      data={isComparison ? allDeptAttendance : deptAttendance}
+                      allRecords={isComparison ? allDeptRecords : filteredRecords}
+                      selectedDepts={selectedDepts}
+                      highlightDepts={isComparison ? selectedDepts : undefined}
+                      onDeptClick={(dept) => toggleDept(dept)}
+                      onDeptDrillChange={(dept) => setDeptDrillSync(dept)}
+                    />
+                    <DeptProductivityChart
+                      data={isComparison ? allDeptAttendance : deptAttendance}
+                      allRecords={isComparison ? allDeptRecords : filteredRecords}
+                      selectedDepts={selectedDepts}
+                      highlightDepts={isComparison ? selectedDepts : undefined}
+                      externalDrillDept={deptDrillSync}
+                      onDrillBack={() => setDeptDrillSync(null)}
+                      onDeptDrillChange={(dept) => setDeptDrillSync(dept)}
+                      onDeptClick={(dept) => toggleDept(dept)}
+                      shiftStartMinutes={thresholds.shiftStartMinutes}
+                      shiftEndMinutes={thresholds.shiftEndMinutes}
+                    />
+                  </div>
+                )}
 
                 {/* Office-wise attendance comparison — only meaningful across 2+ offices */}
                 {offices.length > 1 && (
@@ -1112,7 +1229,7 @@ export default function HRDashboard() {
                 )}
 
                 <div id="section-comparison" className="space-y-6">
-                  {isComparison && departments.length >= 2 && (
+                  {isComparison && hasDepartments && departments.length >= 2 && (
                     <TeamComparisonPanel
                       allRecords={filteredRecords}
                       departments={departments}
