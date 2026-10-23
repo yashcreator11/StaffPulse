@@ -174,7 +174,7 @@ export default function LeaveConfigPage() {
   }
 
   return (
-    <div className="max-w-4xl space-y-6 pb-6">
+    <div className="w-full space-y-6 pb-6">
       <LeavePageHeader
         title="Leave Configuration"
         description="Policy rules that used to be hardcoded — now editable here."

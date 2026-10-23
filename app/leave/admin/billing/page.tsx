@@ -123,7 +123,7 @@ export default function BillingManagementPage() {
   const isNearLimit = usagePercent >= 85;
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 space-y-8">
+    <div className="space-y-6 sm:space-y-8">
       <LeavePageHeader
         title="Billing & Subscription Plans"
         description="Monitor active seat capacity, upgrade your SaaS tier, and manage invoices and tax receipts."

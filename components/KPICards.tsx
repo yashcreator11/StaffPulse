@@ -289,7 +289,7 @@ export default function KPICards({ kpi, thresholds = DEFAULT_THRESHOLDS, viewMod
   ];
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
       {cards.map((card) => {
         const c = STATUS_COLORS[card.status];
         const isSelected = activeFilter === card.filter;
@@ -298,7 +298,7 @@ export default function KPICards({ kpi, thresholds = DEFAULT_THRESHOLDS, viewMod
           <div
             key={card.label}
             onClick={() => onCardClick?.(card.filter)}
-            className={`rounded-2xl border p-4 ${c.bg} ${c.border} ${c.glow} transition-all duration-200 relative shadow-sm hover:shadow-md ${
+            className={`rounded-2xl border p-3.5 sm:p-4 ${c.bg} ${c.border} ${c.glow} transition-all duration-200 relative shadow-sm hover:shadow-md ${
               onCardClick ? 'cursor-pointer hover:-translate-y-0.5' : ''
             } ${isSelected ? 'ring-2 ring-[var(--accent)] border-[var(--accent)] shadow-md' : ''}`}
           >

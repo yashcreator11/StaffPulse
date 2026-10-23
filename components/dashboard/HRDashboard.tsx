@@ -851,7 +851,7 @@ export default function HRDashboard() {
                         }}
                         className={`px-3 py-1 rounded-lg font-medium transition-all ${
                           viewMode === 'single_day'
-                            ? 'bg-blue-600 text-white shadow-sm font-semibold'
+                            ? 'bg-[var(--accent)] text-white shadow-sm font-semibold'
                             : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
                         }`}
                       >
@@ -861,7 +861,7 @@ export default function HRDashboard() {
 
                     {/* Presets based on current mode */}
                     {viewMode !== 'single_day' ? (
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         <button
                           onClick={() => { setDateFrom(null); setDateTo(null); }}
                           className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${!dateFrom && !dateTo
@@ -887,7 +887,7 @@ export default function HRDashboard() {
                         </button>
                       </div>
                     ) : (
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         <button
                           onClick={() => {
                             if (maxAvailableDate) {
@@ -896,7 +896,7 @@ export default function HRDashboard() {
                             }
                           }}
                           className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${dateFrom === maxAvailableDate
-                            ? 'bg-[var(--bg-surface)] text-blue-600 dark:text-blue-400 border border-blue-500 font-semibold'
+                            ? 'bg-[var(--bg-surface)] text-[var(--accent)] border border-[var(--accent)] font-semibold'
                             : 'bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text-primary)]'
                             }`}
                         >
@@ -910,7 +910,7 @@ export default function HRDashboard() {
                               setDateTo(prev);
                             }}
                             className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${dateFrom === allAvailableDates[allAvailableDates.length - 2]
-                              ? 'bg-[var(--bg-surface)] text-blue-600 dark:text-blue-400 border border-blue-500 font-semibold'
+                              ? 'bg-[var(--bg-surface)] text-[var(--accent)] border border-[var(--accent)] font-semibold'
                               : 'bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text-primary)]'
                               }`}
                           >
@@ -936,8 +936,8 @@ export default function HRDashboard() {
                 {/* Date picker (Single Day vs Range) */}
                 {allAvailableDates.length > 0 && (
                   viewMode === 'single_day' ? (
-                    <div className="flex items-center gap-2 bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl px-3 py-2 shadow-inner">
-                      <Calendar className="w-4 h-4 text-blue-500 flex-shrink-0" />
+                    <div className="flex items-center gap-2 bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl px-3 py-2 shadow-inner max-w-full">
+                      <Calendar className="w-4 h-4 text-[var(--accent)] flex-shrink-0" />
                       <span className="text-[var(--text-muted)] text-xs font-medium">Selected Day:</span>
                       <input
                         type="date"
@@ -957,49 +957,53 @@ export default function HRDashboard() {
                       />
                     </div>
                   ) : (
-                    <div className="flex items-center gap-2 bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl px-3 py-2 shadow-inner">
+                    <div className="flex items-center flex-wrap sm:flex-nowrap gap-2 bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl px-3 py-2 shadow-inner max-w-full">
                       <Calendar className="w-4 h-4 text-[var(--accent)] flex-shrink-0" />
-                      <span className="text-[var(--text-muted)] text-xs font-medium">From:</span>
-                      <input
-                        type="date"
-                        value={dateFrom ?? impliedRange?.min ?? ''}
-                        min={minAvailableDate}
-                        max={effectiveDateTo ?? maxAvailableDate}
-                        onChange={e => {
-                          const v = e.target.value || null;
-                          if (v && (v < minAvailableDate! || v > maxAvailableDate!)) {
-                            showToast('error', `No data outside ${minAvailableDate} → ${maxAvailableDate}.`);
-                            return;
-                          }
-                          setDateFrom(v);
-                          if (v) setDateTo(effectiveDateTo ?? v);
-                        }}
-                        className={`bg-transparent text-xs font-medium focus:outline-none w-28 sm:w-32 ${dateFrom ? 'text-[var(--text-primary)]' : 'text-[var(--text-muted)]'}`}
-                        title={!dateFrom ? 'Auto-filled to match current month data' : undefined}
-                      />
-                      <span className="text-[var(--border)] text-xs font-bold">|</span>
-                      <span className="text-[var(--text-muted)] text-xs font-medium">To:</span>
-                      <input
-                        type="date"
-                        value={dateTo ?? impliedRange?.max ?? ''}
-                        min={effectiveDateFrom ?? minAvailableDate}
-                        max={maxAvailableDate}
-                        onChange={e => {
-                          const v = e.target.value || null;
-                          if (v && (v < minAvailableDate! || v > maxAvailableDate!)) {
-                            showToast('error', `No data outside ${minAvailableDate} → ${maxAvailableDate}.`);
-                            return;
-                          }
-                          setDateTo(v);
-                          if (v) setDateFrom(effectiveDateFrom ?? v);
-                        }}
-                        className={`bg-transparent text-xs font-medium focus:outline-none w-28 sm:w-32 ${dateTo ? 'text-[var(--text-primary)]' : 'text-[var(--text-muted)]'}`}
-                        title={!dateTo ? 'Auto-filled to match current month data' : undefined}
-                      />
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="text-[var(--text-muted)] text-xs font-medium">From:</span>
+                        <input
+                          type="date"
+                          value={dateFrom ?? impliedRange?.min ?? ''}
+                          min={minAvailableDate}
+                          max={effectiveDateTo ?? maxAvailableDate}
+                          onChange={e => {
+                            const v = e.target.value || null;
+                            if (v && (v < minAvailableDate! || v > maxAvailableDate!)) {
+                              showToast('error', `No data outside ${minAvailableDate} → ${maxAvailableDate}.`);
+                              return;
+                            }
+                            setDateFrom(v);
+                            if (v) setDateTo(effectiveDateTo ?? v);
+                          }}
+                          className={`bg-transparent text-xs font-medium focus:outline-none w-28 sm:w-32 ${dateFrom ? 'text-[var(--text-primary)]' : 'text-[var(--text-muted)]'}`}
+                          title={!dateFrom ? 'Auto-filled to match current month data' : undefined}
+                        />
+                      </div>
+                      <span className="hidden sm:inline text-[var(--border)] text-xs font-bold">|</span>
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="text-[var(--text-muted)] text-xs font-medium">To:</span>
+                        <input
+                          type="date"
+                          value={dateTo ?? impliedRange?.max ?? ''}
+                          min={effectiveDateFrom ?? minAvailableDate}
+                          max={maxAvailableDate}
+                          onChange={e => {
+                            const v = e.target.value || null;
+                            if (v && (v < minAvailableDate! || v > maxAvailableDate!)) {
+                              showToast('error', `No data outside ${minAvailableDate} → ${maxAvailableDate}.`);
+                              return;
+                            }
+                            setDateTo(v);
+                            if (v) setDateFrom(effectiveDateFrom ?? v);
+                          }}
+                          className={`bg-transparent text-xs font-medium focus:outline-none w-28 sm:w-32 ${dateTo ? 'text-[var(--text-primary)]' : 'text-[var(--text-muted)]'}`}
+                          title={!dateTo ? 'Auto-filled to match current month data' : undefined}
+                        />
+                      </div>
                       {(dateFrom || dateTo) && (
                         <button
                           onClick={() => { setDateFrom(null); setDateTo(null); }}
-                          className="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors ml-1 p-0.5 rounded hover:bg-[var(--bg-elevated)]"
+                          className="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors ml-auto sm:ml-1 p-0.5 rounded hover:bg-[var(--bg-elevated)]"
                           title="Clear date range"
                         >
                           <XIcon className="w-3.5 h-3.5" />

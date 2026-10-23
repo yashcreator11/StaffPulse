@@ -93,15 +93,15 @@ export default function RichDayView({ groupLabel = 'Department' }: { groupLabel?
   return (
     <div className="space-y-6">
       {/* Date Bar & Shortcuts */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900/90 p-4 shadow-sm">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-4 shadow-sm">
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={() => setDateShortcut('today')}
-            className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition ${
+            className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition-all ${
               selectedDate === new Date().toISOString().split('T')[0]
-                ? 'bg-blue-600 text-white shadow-sm'
-                : 'border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                ? 'bg-gradient-to-r from-[var(--accent)] to-[var(--accent-hover)] text-white shadow-md shadow-[var(--accent)]/20'
+                : 'border border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface)]'
             }`}
           >
             Today
@@ -109,47 +109,47 @@ export default function RichDayView({ groupLabel = 'Department' }: { groupLabel?
           <button
             type="button"
             onClick={() => setDateShortcut('yesterday')}
-            className="rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+            className="rounded-xl border border-[var(--border)] px-3 py-1.5 text-xs font-semibold text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface)] transition-all"
           >
             Yesterday
           </button>
           <button
             type="button"
             onClick={() => setDateShortcut('prev_workday')}
-            className="rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+            className="rounded-xl border border-[var(--border)] px-3 py-1.5 text-xs font-semibold text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface)] transition-all"
           >
             Previous Working Day
           </button>
         </div>
 
         <div className="flex items-center gap-2">
-          <Calendar className="h-4 w-4 text-slate-400 shrink-0" />
+          <Calendar className="h-4 w-4 text-[var(--text-muted)] shrink-0" />
           <input
             type="date"
             value={selectedDate}
             onChange={(e) => setSelectedDate(e.target.value)}
-            className="rounded-xl border border-slate-200 dark:border-slate-700 bg-transparent px-3 py-1.5 text-xs font-medium text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/30 focus:border-[var(--accent)] transition-all"
           />
         </div>
       </div>
 
       {loading ? (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="h-28 rounded-2xl bg-slate-200 dark:bg-slate-800 animate-pulse" />
-          <div className="h-28 rounded-2xl bg-slate-200 dark:bg-slate-800 animate-pulse" />
-          <div className="h-28 rounded-2xl bg-slate-200 dark:bg-slate-800 animate-pulse" />
-          <div className="h-28 rounded-2xl bg-slate-200 dark:bg-slate-800 animate-pulse" />
+          <div className="h-28 rounded-2xl bg-[var(--bg-elevated)] animate-pulse" />
+          <div className="h-28 rounded-2xl bg-[var(--bg-elevated)] animate-pulse" />
+          <div className="h-28 rounded-2xl bg-[var(--bg-elevated)] animate-pulse" />
+          <div className="h-28 rounded-2xl bg-[var(--bg-elevated)] animate-pulse" />
         </div>
       ) : metrics?.isHolidayOrWeekend ? (
         /* Holiday / Weekend Banner State */
-        <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/20 p-8 text-center space-y-3">
+        <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/20 p-8 text-center space-y-3 shadow-xs">
           <div className="inline-flex p-3 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400">
             <Coffee className="h-8 w-8" />
           </div>
-          <h3 className="text-xl font-bold text-slate-900 dark:text-white">
+          <h3 className="text-xl font-bold text-[var(--text-primary)]">
             {metrics.holidayName ? `Holiday: ${metrics.holidayName}` : 'Weekly Off / Non-Working Day'}
           </h3>
-          <p className="text-sm text-slate-500 dark:text-slate-400 max-w-md mx-auto">
+          <p className="text-sm text-[var(--text-muted)] max-w-md mx-auto">
             No standard office attendance is expected on {selectedDate}. System calculations are normalized
             without marking automated absences.
           </p>
@@ -159,67 +159,67 @@ export default function RichDayView({ groupLabel = 'Department' }: { groupLabel?
           {/* Executive KPI Cards Grid */}
           <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-5 gap-4">
             {/* Total Expected */}
-            <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900/90 p-5 shadow-sm">
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-5 shadow-sm hover:border-[var(--accent)]/30 hover:shadow-md transition-all duration-200">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-medium text-slate-500">Expected Workforce</span>
+                <span className="text-xs font-medium text-[var(--text-muted)]">Expected Workforce</span>
                 <Users className="h-4 w-4 text-blue-500" />
               </div>
-              <div className="mt-2 text-2xl font-bold text-slate-900 dark:text-white">
+              <div className="mt-2 text-2xl font-bold text-[var(--text-primary)]">
                 {metrics?.totalExpected || 0}
               </div>
-              <div className="mt-1 text-[11px] text-slate-400">Total active headcount</div>
+              <div className="mt-1 text-[11px] text-[var(--text-muted)]">Total active headcount</div>
             </div>
 
             {/* Present Today */}
-            <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900/90 p-5 shadow-sm">
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-5 shadow-sm hover:border-emerald-500/30 hover:shadow-md transition-all duration-200">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-medium text-slate-500">Present In Office</span>
+                <span className="text-xs font-medium text-[var(--text-muted)]">Present In Office</span>
                 <CheckCircle2 className="h-4 w-4 text-emerald-500" />
               </div>
-              <div className="mt-2 text-2xl font-bold text-slate-900 dark:text-white">
+              <div className="mt-2 text-2xl font-bold text-[var(--text-primary)]">
                 {metrics?.presentCount || 0}
               </div>
-              <div className="mt-1 text-[11px] text-emerald-600 font-semibold">
+              <div className="mt-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold">
                 {attendancePercent}% attendance rate
               </div>
             </div>
 
             {/* Approved Leave / WFH */}
-            <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900/90 p-5 shadow-sm">
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-5 shadow-sm hover:border-purple-500/30 hover:shadow-md transition-all duration-200">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-medium text-slate-500">On Leave / WFH</span>
+                <span className="text-xs font-medium text-[var(--text-muted)]">On Leave / WFH</span>
                 <Building className="h-4 w-4 text-purple-500" />
               </div>
-              <div className="mt-2 text-2xl font-bold text-slate-900 dark:text-white">
+              <div className="mt-2 text-2xl font-bold text-[var(--text-primary)]">
                 {(metrics?.onLeaveCount || 0) + (metrics?.wfhCount || 0)}
               </div>
-              <div className="mt-1 text-[11px] text-slate-400">
+              <div className="mt-1 text-[11px] text-[var(--text-muted)]">
                 {metrics?.onLeaveCount || 0} Leave · {metrics?.wfhCount || 0} WFH
               </div>
             </div>
 
             {/* Unexcused Absences */}
-            <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900/90 p-5 shadow-sm">
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-5 shadow-sm hover:border-rose-500/30 hover:shadow-md transition-all duration-200">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-medium text-slate-500">Unexcused Absences</span>
+                <span className="text-xs font-medium text-[var(--text-muted)]">Unexcused Absences</span>
                 <UserX className="h-4 w-4 text-rose-500" />
               </div>
-              <div className="mt-2 text-2xl font-bold text-slate-900 dark:text-white">
+              <div className="mt-2 text-2xl font-bold text-[var(--text-primary)]">
                 {metrics?.absentCount || 0}
               </div>
-              <div className="mt-1 text-[11px] text-rose-600 font-medium">Pending regularization</div>
+              <div className="mt-1 text-[11px] text-rose-600 dark:text-rose-400 font-medium">Pending regularization</div>
             </div>
 
             {/* Late Marks */}
-            <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900/90 p-5 shadow-sm col-span-2 sm:col-span-1">
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-5 shadow-sm col-span-2 sm:col-span-1 hover:border-amber-500/30 hover:shadow-md transition-all duration-200">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-medium text-slate-500">Late Arrivals</span>
+                <span className="text-xs font-medium text-[var(--text-muted)]">Late Arrivals</span>
                 <Clock className="h-4 w-4 text-amber-500" />
               </div>
-              <div className="mt-2 text-2xl font-bold text-slate-900 dark:text-white">
+              <div className="mt-2 text-2xl font-bold text-[var(--text-primary)]">
                 {metrics?.lateArrivalsCount || 0}
               </div>
-              <div className="mt-1 text-[11px] text-amber-600 font-medium">&gt; 9:30 AM punch in</div>
+              <div className="mt-1 text-[11px] text-amber-600 dark:text-amber-400 font-medium">&gt; 9:30 AM punch in</div>
             </div>
           </div>
 

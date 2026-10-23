@@ -134,29 +134,29 @@ export default function ViolationsPage() {
                     {group.items.map((v) => (
                       <div
                         key={v.id}
-                        className="bg-[var(--bg-elevated)]/40 border border-[var(--border)] rounded-xl px-4 py-3 flex items-start justify-between gap-4"
+                        className="bg-[var(--bg-elevated)]/40 border border-[var(--border)] rounded-2xl p-4 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 transition-all hover:border-[var(--accent)]/30 hover:shadow-xs"
                       >
-                        <div className="min-w-0">
-                          <p className="text-[var(--text-primary)] text-sm font-medium">{v.summary}</p>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[var(--text-primary)] text-sm font-semibold">{v.summary}</p>
                           <p className="text-[var(--text-muted)] text-xs mt-0.5">
                             {v.employeeName} ({v.employeeCode}) · {v.occurredOn}
                           </p>
-                          <p className="text-[var(--text-muted)] text-xs mt-1">{v.detail}</p>
+                          <p className="text-[var(--text-muted)] text-xs mt-1 leading-relaxed">{v.detail}</p>
 
                           {v.type === 'missing_certificate' && (
-                            <div className="mt-2 flex items-center gap-2">
+                            <div className="mt-2.5 flex flex-wrap items-center gap-2">
                               <input
                                 type="text"
                                 value={certDrafts[v.id] || ''}
                                 onChange={(e) => setCertDrafts((s) => ({ ...s, [v.id]: e.target.value }))}
                                 placeholder="Certificate reference / filename on file…"
-                                className="bg-[var(--bg-surface)] border border-[var(--border)] rounded-lg px-2.5 py-1.5 text-xs text-[var(--text-primary)] w-64"
+                                className="bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl px-3 py-1.5 text-xs text-[var(--text-primary)] w-full sm:w-64 max-w-full focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/30 focus:border-[var(--accent)] transition-all"
                               />
                               <button
                                 type="button"
                                 onClick={() => resolveCertificate(v)}
                                 disabled={certSaving === v.id}
-                                className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
+                                className="bg-gradient-to-r from-[var(--accent)] to-[var(--accent-hover)] hover:opacity-90 disabled:opacity-50 text-white text-xs font-semibold px-3.5 py-1.5 rounded-xl transition-all shadow-xs shrink-0"
                               >
                                 {certSaving === v.id ? 'Saving…' : 'Mark Received'}
                               </button>

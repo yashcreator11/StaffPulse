@@ -135,7 +135,7 @@ export default function ComplianceManagementPage() {
   );
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 space-y-8">
+    <div className="space-y-6 sm:space-y-8">
       <LeavePageHeader
         title="Compliance & Data Privacy"
         description="Immutable audit logging, India DPDP Act 2023 / GDPR portable data exports, and Right-to-be-Forgotten workflows."

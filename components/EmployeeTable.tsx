@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 import { useState, useMemo, memo } from 'react';
 import { ChevronUp, ChevronDown, ChevronsUpDown, Search, Zap, AlertTriangle, X, Users, Info } from 'lucide-react';
 import { EmployeeSummary } from '@/lib/types';
@@ -128,7 +128,7 @@ function EmployeeTable({
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] shadow-sm scroll-thin">
+      <div className="responsive-table-wrapper overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] shadow-sm scroll-thin">
         <table className="w-full text-sm">
           <thead className="bg-[var(--bg-elevated)]/70 border-b border-[var(--border)]">
             <tr>

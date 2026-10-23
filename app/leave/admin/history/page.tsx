@@ -369,14 +369,14 @@ export default function LeaveTrackerPage() {
           Segmented pill control so it reads as a different kind of
           control than the underline tabs below (which are a TAB switch
           one level down, inside Table view only). */}
-      <div className="inline-flex items-center gap-1 bg-[var(--bg-elevated)] border border-[var(--border)] rounded-full p-1">
+      <div className="inline-flex items-center gap-1 bg-[var(--bg-elevated)] border border-[var(--border)] rounded-full p-1 shadow-xs">
         <button
           type="button"
           onClick={() => setView('calendar')}
-          className={`inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
+          className={`inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs sm:text-sm font-semibold transition-all ${
             view === 'calendar'
-              ? 'bg-emerald-600 text-white shadow-sm'
-              : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+              ? 'bg-gradient-to-r from-[var(--accent)] to-[var(--accent-hover)] text-white shadow-md shadow-[var(--accent)]/20'
+              : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface)]'
           }`}
         >
           <CalendarDays size={14} />
@@ -385,10 +385,10 @@ export default function LeaveTrackerPage() {
         <button
           type="button"
           onClick={() => setView('table')}
-          className={`inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
+          className={`inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs sm:text-sm font-semibold transition-all ${
             view === 'table'
-              ? 'bg-emerald-600 text-white shadow-sm'
-              : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+              ? 'bg-gradient-to-r from-[var(--accent)] to-[var(--accent-hover)] text-white shadow-md shadow-[var(--accent)]/20'
+              : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface)]'
           }`}
         >
           <Table2 size={14} />
@@ -466,16 +466,16 @@ export default function LeaveTrackerPage() {
           {/* Tabs — a slice switch WITHIN Table view, so it stays the
               familiar underline style, one level below the pill toggle
               above. */}
-          <div className="flex gap-1 border-b border-[var(--border)]">
+          <div className="flex gap-2 border-b border-[var(--border)] overflow-x-auto pb-px">
             {TABS.map((t) => (
               <button
                 key={t.key}
                 type="button"
                 onClick={() => setTab(t.key)}
-                className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                className={`px-4 py-2 text-xs sm:text-sm font-semibold border-b-2 -mb-px transition-all whitespace-nowrap ${
                   tab === t.key
-                    ? 'border-emerald-500 text-[var(--text-primary)]'
-                    : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+                    ? 'border-[var(--accent)] text-[var(--accent)] shadow-xs'
+                    : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:border-[var(--border)]'
                 }`}
               >
                 {t.label}

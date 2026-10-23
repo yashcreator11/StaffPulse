@@ -12,10 +12,12 @@
   --foreground: #0f172a;
   --bg-surface: #ffffff;
   --bg-elevated: #f1f5f9;
+  --bg-secondary: #f1f5f9;
   --bg-card: #ffffff;
   --border: #e2e8f0;
   --border-subtle: #edf2f7;
   --text-primary: #0f172a;
+  --text-secondary: #475569;
   --text-muted: #64748b;
   --text-dim: #94a3b8;
   --accent: #ea580c;
@@ -38,10 +40,12 @@
 .dark {
   --bg-surface: #0b0f19;   /* Sleek deep slate */
   --bg-elevated: #111827;  /* Rich elevated dark */
+  --bg-secondary: #111827; /* Compatible alias */
   --bg-card: #131d31;      /* Modern glass card */
   --border: #1e293b;       /* Subtle slate border */
   --border-subtle: rgba(255, 255, 255, 0.07);
   --text-primary: #f8fafc; /* Crisp white */
+  --text-secondary: #cbd5e1;/* High-contrast secondary text */
   --text-muted: #94a3b8;   /* Balanced slate */
   --text-dim: #64748b;
   --accent: #f97316;       /* Vibrant warm orange */
@@ -88,7 +92,14 @@
   --font-mono: var(--font-geist-mono);
 }
 
+html {
+  max-width: 100vw;
+  overflow-x: hidden;
+}
+
 body {
+  max-width: 100vw;
+  overflow-x: hidden;
   background: var(--background);
   background-image: var(--ambient-glow);
   background-attachment: fixed;
@@ -98,6 +109,11 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+::selection {
+  background-color: var(--accent);
+  color: #ffffff;
+}
+
 /* Glassmorphic card styling */
 .glass-panel {
   background: var(--bg-card);
@@ -105,6 +121,14 @@ body {
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid var(--border);
   box-shadow: var(--shadow-card);
+}
+
+/* Responsive Table Wrapper */
+.responsive-table-wrapper {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* Premium Card container */
