@@ -142,7 +142,8 @@ async function main() {
       user_id: masterAuthId,
       email: MASTER_ADMIN.email,
       full_name: MASTER_ADMIN.full_name,
-      role: 'super_admin',
+      role: 'owner',
+      mfa_required: false,
       is_active: true,
     },
     { onConflict: 'user_id' }

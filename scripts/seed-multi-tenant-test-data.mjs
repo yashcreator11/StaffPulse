@@ -302,7 +302,8 @@ async function main() {
       user_id: masterAuthId,
       email: 'master@staffpulse.io',
       full_name: 'Platform Super Admin',
-      role: 'super_admin',
+      role: 'owner',
+      mfa_required: false,
       is_active: true,
     },
     { onConflict: 'user_id' }
