@@ -76,6 +76,7 @@ export async function POST(req: NextRequest) {
       .from('employees')
       .select('id, email, auth_user_id')
       .eq('employee_code', employee_code)
+      .eq('org_id', requester.org_id)
       .maybeSingle();
 
     if (findError) {
@@ -122,7 +123,8 @@ export async function POST(req: NextRequest) {
     const { error: linkError } = await service
       .from('employees')
       .update(updatePayload)
-      .eq('id', employee.id);
+      .eq('id', employee.id)
+      .eq('org_id', requester.org_id);
 
     if (linkError) {
       results.push({

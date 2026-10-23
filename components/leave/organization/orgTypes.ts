@@ -1,4 +1,4 @@
-﻿export type DepartmentRow = {
+export type DepartmentRow = {
   department: string;
   managerId: string | null;
   managerName: string | null;
@@ -47,7 +47,7 @@ export type OrgTreeNode = {
   children: OrgTreeNode[];
 };
 
-export type OrgTab = 'chart' | 'departments' | 'managers' | 'leads';
+export type OrgTab = 'chart' | 'departments' | 'managers' | 'leads' | 'settings';
 
 export const ROLE_LABEL: Record<string, string> = {
   hr_super_admin: 'HR (Super Admin)',

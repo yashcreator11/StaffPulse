@@ -121,15 +121,15 @@ _P0 = blocks selling to a second customer. P1 = needed before public launch. P2 
 
 ## G. Onboarding and Admin Experience (P1)
 
-- [ ] Organization signup flow with email verification
-- [ ] Guided setup wizard: company, offices, holidays, leave policy, login method, how people are grouped (departments, teams, branches or none), employees, first upload
-- [ ] Employee CSV import with validation and a downloadable template
-- [ ] Opening-balance import
-- [ ] Demo mode with sample data so prospects can try the dashboard first
-- [ ] Org settings page: branding, time zone, language, data retention
+- [x] Organization signup flow with email verification
+- [x] Guided setup wizard: company, offices, holidays, leave policy, login method, how people are grouped (departments, teams, branches or none), employees, first upload
+- [x] Employee CSV import with validation and a downloadable template
+- [x] Opening-balance import
+- [x] Demo mode with sample data so prospects can try the dashboard first
+- [x] Org settings page: branding, time zone, language, data retention
 - [x] Platform super-admin console: list tenants, usage, plan, suspend, controlled support access with an audit trail
 - [ ] In-app help, tooltips and an empty state on every screen
-- [ ] Move `scripts/bulk-create-employee-auth.mjs` out of the customer path or turn it into an admin feature
+- [x] Move `scripts/bulk-create-employee-auth.mjs` out of the customer path or turn it into an admin feature
 
 ---
 

@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import LeavePageHeader from '@/components/leave/LeavePageHeader';
@@ -18,6 +18,7 @@ import OrgChartTab from '@/components/leave/organization/OrgChartTab';
 import OrgDepartmentsTab from '@/components/leave/organization/OrgDepartmentsTab';
 import OrgManagersTab from '@/components/leave/organization/OrgManagersTab';
 import OrgLeadsTab from '@/components/leave/organization/OrgLeadsTab';
+import OrgSettingsTab from '@/components/leave/organization/OrgSettingsTab';
 
 export default function OrganizationManagementPage() {
   const [departments, setDepartments] = useState<DepartmentRow[]>([]);
@@ -182,11 +183,12 @@ export default function OrganizationManagementPage() {
     });
   }
 
-  const TABS: { key: OrgTab; label: string; count: number }[] = [
+  const TABS: { key: OrgTab; label: string; count?: number }[] = [
     { key: 'chart', label: 'Org Chart', count: totalPeople },
     { key: 'departments', label: 'Departments', count: departments.length },
     { key: 'managers', label: 'Managers', count: managers.length },
     { key: 'leads', label: 'Leads', count: leads.length },
+    { key: 'settings', label: 'Settings & Onboarding' },
   ];
 
   return (
@@ -272,26 +274,30 @@ export default function OrganizationManagementPage() {
                   }}
                 >
                   {t.label}
-                  <span
-                    className="text-[10px] font-bold rounded-full px-1.5 py-0.5"
-                    style={{
-                      background: tab === t.key ? 'rgba(251,146,60,0.16)' : 'var(--bg-elevated)',
-                      color: tab === t.key ? 'var(--accent)' : 'var(--text-muted)',
-                    }}
-                  >
-                    {t.count}
-                  </span>
+                  {typeof t.count === 'number' && (
+                    <span
+                      className="text-[10px] font-bold rounded-full px-1.5 py-0.5"
+                      style={{
+                        background: tab === t.key ? 'rgba(251,146,60,0.16)' : 'var(--bg-elevated)',
+                        color: tab === t.key ? 'var(--accent)' : 'var(--text-muted)',
+                      }}
+                    >
+                      {t.count}
+                    </span>
+                  )}
                 </button>
               ))}
             </div>
-            <input
-              type="text"
-              value={orgSearch}
-              onChange={(e) => setOrgSearch(e.target.value)}
-              placeholder="Search by name, code, or department…"
-              className="mb-2 w-full sm:w-72 rounded-lg px-3 py-1.5 text-sm focus:outline-none"
-              style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}
-            />
+            {tab !== 'settings' && (
+              <input
+                type="text"
+                value={orgSearch}
+                onChange={(e) => setOrgSearch(e.target.value)}
+                placeholder="Search by name, code, or department…"
+                className="mb-2 w-full sm:w-72 rounded-lg px-3 py-1.5 text-sm focus:outline-none"
+                style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}
+              />
+            )}
           </div>
 
           {/* ── Tab Panes ───────────────────────────────────────────── */}
@@ -354,6 +360,8 @@ export default function OrganizationManagementPage() {
               }
             />
           )}
+
+          {tab === 'settings' && <OrgSettingsTab />}
         </>
       )}
     </div>
