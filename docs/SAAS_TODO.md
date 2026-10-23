@@ -73,15 +73,15 @@ _P0 = blocks selling to a second customer. P1 = needed before public launch. P2 
 
 ## D. Leave Policy Engine (P0 for the first customer that differs from WonderBiz)
 
-- [ ] ✔ Remove the `leave_types.code` check constraint (SL, CL, PL, LWP only) so organizations can define their own types
-- [ ] Create `leave_policies`, `leave_rules` and `policy_assignments` tables with effective-dated versions
-- [ ] Rule types: entitlement, accrual timing, carry-forward, eligibility, application limits, notice tiers, documentation, approval chain, fallback behavior, leave year
-- [ ] ✔ Move probation accrual and annual-reset logic out of fixed SQL functions into parameterized rules
-- [ ] ✔ Split `applyLeavePolicyAndMutateBalance.ts` (1.4k lines) into a pure `evaluateLeaveRequest()` and a thin write layer
-- [ ] Regression suite proving the new engine reproduces WonderBiz's current results exactly (the gate before moving on)
-- [ ] Policy templates: India standard, statutory leave, US-style PTO, simple annual quota
+- [x] ✔ Remove the `leave_types.code` check constraint (SL, CL, PL, LWP only) so organizations can define their own types
+- [x] Create `leave_policies`, `leave_rules` and `policy_assignments` tables with effective-dated versions
+- [x] Rule types: entitlement, accrual timing, carry-forward, eligibility, application limits, notice tiers, documentation, approval chain, fallback behavior, leave year
+- [x] ✔ Move probation accrual and annual-reset logic out of fixed SQL functions into parameterized rules
+- [x] ✔ Split `applyLeavePolicyAndMutateBalance.ts` (1.4k lines) into a pure `evaluateLeaveRequest()` and a thin write layer
+- [x] Regression suite proving the new engine reproduces WonderBiz's current results exactly (the gate before moving on)
+- [x] Policy templates: India standard, statutory leave, US-style PTO, simple annual quota
 - [ ] Policy editor UI with validation and a "simulate this policy" preview
-- [ ] Multiple policies per organization, assigned by office, employee type or department
+- [x] Multiple policies per organization, assigned by office, employee type or department
 - [ ] Record the policy version on every leave request; never recalculate history
 - [ ] Configurable approval chains: skip levels, delegation, out-of-office approver
 - [ ] More leave types: maternity, paternity, comp-off, bereavement, optional holidays
