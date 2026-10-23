@@ -63,7 +63,7 @@ _P0 = blocks selling to a second customer. P1 = needed before public launch. P2 
 - [x] ✔ Financial-year logic (`fyStartYearForDate`) and the 25 March reset in `vercel.json`: per-org leave year and reset date
 - [x] ✔ Probation unlock (4 months) and notice-period default (30 days): per-org or per-policy
 - [ ] Holiday lists: per-country templates that each org can edit
-- [ ] Shift times and grace periods: per office, plus per department or shift (night and rotating shifts)
+- [x] Shift times and grace periods: per office, plus per department or shift (night and rotating shifts)
 - [x] Replace "WonderBiz" text in UI, emails, PDFs and page titles with org name and logo
 - [ ] Reminder timings, escalation rules and KPI thresholds: per org
 - [ ] Time zones: remove any India-time assumption; store a time zone per office
@@ -80,11 +80,11 @@ _P0 = blocks selling to a second customer. P1 = needed before public launch. P2 
 - [x] ✔ Split `applyLeavePolicyAndMutateBalance.ts` (1.4k lines) into a pure `evaluateLeaveRequest()` and a thin write layer
 - [x] Regression suite proving the new engine reproduces WonderBiz's current results exactly (the gate before moving on)
 - [x] Policy templates: India standard, statutory leave, US-style PTO, simple annual quota
-- [ ] Policy editor UI with validation and a "simulate this policy" preview
+- [x] Policy editor UI with validation and a "simulate this policy" preview
 - [x] Multiple policies per organization, assigned by office, employee type or department
 - [ ] Record the policy version on every leave request; never recalculate history
 - [ ] Configurable approval chains: skip levels, delegation, out-of-office approver
-- [ ] More leave types: maternity, paternity, comp-off, bereavement, optional holidays
+- [x] More leave types: maternity, paternity, comp-off, bereavement, optional holidays
 - [ ] Collect real leave policy documents from 3–5 prospects before finalizing the rule types
 
 ---
@@ -235,13 +235,13 @@ _P0 = blocks selling to a second customer. P1 = needed before public launch. P2 
 
 ### N3. Organizations with Many Teams (P1; performance P2)
 
-- [ ] Top and bottom N teams by default in bar charts, with sorting and a "show all" toggle
+- [x] Top and bottom N teams by default in bar charts, with sorting and a "show all" toggle
 - [ ] Heatmap with teams as rows and dates as columns, scrollable
 - [ ] Searchable team filter grouped by hierarchy
 - [ ] ✔ Cap comparison mode (it starts from any 2 or more departments today) with a ranked-table fallback
 - [ ] Parent and child groups (Division > Department > Team) with roll-up totals
 - [ ] ✔ Extend the manager team-scoped view (managedDepartments, teamCodes) with a team switcher and an "all my teams" total
-- [ ] Suppress or flag rates for groups under the minimum size (e.g. fewer than 3–5 people)
+- [x] Suppress or flag rates for groups under the minimum size (e.g. fewer than 3–5 people)
 - [ ] ✔ Move aggregation to the server or database views; today all records are loaded and calculated in the browser (`useDashboardData.ts`)
 - [ ] Paginate employee tables and large panels
 

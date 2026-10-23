@@ -12,6 +12,7 @@ import {
   SlidersHorizontal,
 } from 'lucide-react';
 import LeavePageHeader from '@/components/leave/LeavePageHeader';
+import PolicyEditorSimulator from '@/components/leave/PolicyEditorSimulator';
 
 // Feedback item #3 — "Leave Configuration & Policy": HR-facing editor
 // for what used to be hardcoded (lib/leavePolicy.ts's probation/notice
@@ -408,6 +409,11 @@ export default function LeaveConfigPage() {
             </div>
           );
         })}
+      </div>
+
+      {/* Interactive Policy Simulation & Dynamic Rule Engine */}
+      <div className="pt-6 border-t border-[var(--border)]">
+        <PolicyEditorSimulator />
       </div>
 
       {/* Sticky save bar — only takes up space once there's something to
