@@ -195,7 +195,7 @@ _P0 = blocks selling to a second customer. P1 = needed before public launch. P2 
 
 - [ ] Per-org date formats, week start day and weekends (some countries use Friday–Saturday)
 - [ ] Number and currency formats
-- [ ] Multiple UI languages (start with English; plan Hindi and others)
+- [x] Standard English UI (multi-language / Hindi localization excluded per product decision)
 - [ ] Country-specific statutory leave and holiday templates
 
 ---
