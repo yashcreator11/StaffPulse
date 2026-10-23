@@ -14,9 +14,11 @@ import { createBrowserClient } from '@supabase/ssr';
 // the Leave Tracker in the same request. See PROGRESS.md, "Post-Sprint-2
 // pivot" point 5, for the access-control decision this resolves.
 export function createClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-anon-key';
   return createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    url,
+    anonKey,
     { cookieOptions: { name: 'sb-auth' } }
   );
 }

@@ -62,40 +62,7 @@ VALUES (
 ON CONFLICT (id) DO NOTHING;
 
 -- -----------------------------------------------------------------------------
--- 3. TENANT CONTEXT HELPER FUNCTIONS
--- -----------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION auth_org_id()
-RETURNS uuid
-LANGUAGE sql
-STABLE
-SECURITY DEFINER
-SET search_path = public
-AS $$
-  SELECT org_id FROM employees
-  WHERE auth_user_id = auth.uid()
-    AND is_deleted = false
-  LIMIT 1;
-$$;
-
-CREATE OR REPLACE FUNCTION is_org_admin(target_org_id uuid)
-RETURNS boolean
-LANGUAGE sql
-STABLE
-SECURITY DEFINER
-SET search_path = public
-AS $$
-  SELECT (auth.role() = 'service_role') OR EXISTS (
-    SELECT 1 FROM employees
-    WHERE auth_user_id = auth.uid()
-      AND org_id = target_org_id
-      AND role IN ('hr', 'hr_super_admin')
-      AND is_deleted = false
-  );
-$$;
-
--- -----------------------------------------------------------------------------
--- 4. ATTACH ORG_ID TO ALL TENANT TABLES & BACKFILL TO WONDERBIZ #1
+-- 3. ATTACH ORG_ID TO ALL TENANT TABLES & BACKFILL TO WONDERBIZ #1
 -- -----------------------------------------------------------------------------
 
 DO $$
@@ -130,6 +97,39 @@ BEGIN
     END;
   END LOOP;
 END $$;
+
+-- -----------------------------------------------------------------------------
+-- 4. TENANT CONTEXT HELPER FUNCTIONS
+-- -----------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION auth_org_id()
+RETURNS uuid
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT org_id FROM employees
+  WHERE auth_user_id = auth.uid()
+    AND is_deleted = false
+  LIMIT 1;
+$$;
+
+CREATE OR REPLACE FUNCTION is_org_admin(target_org_id uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT (auth.role() = 'service_role') OR EXISTS (
+    SELECT 1 FROM employees
+    WHERE auth_user_id = auth.uid()
+      AND org_id = target_org_id
+      AND role IN ('hr', 'hr_super_admin')
+      AND is_deleted = false
+  );
+$$;
 
 -- -----------------------------------------------------------------------------
 -- 5. RE-SCOPE UNIQUE CONSTRAINTS PER-TENANT
@@ -171,7 +171,7 @@ CREATE INDEX IF NOT EXISTS idx_employees_org_dept ON employees(org_id, departmen
 CREATE INDEX IF NOT EXISTS idx_attendance_org_code_date ON attendance_records(org_id, employee_code, date);
 CREATE INDEX IF NOT EXISTS idx_leave_requests_org_status ON leave_requests(org_id, status);
 CREATE INDEX IF NOT EXISTS idx_leave_balances_org_emp ON leave_balances(org_id, employee_id);
-CREATE INDEX IF NOT EXISTS idx_notifications_org_emp ON notifications(org_id, employee_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_org_emp ON notifications(org_id, recipient_employee_id);
 
 -- -----------------------------------------------------------------------------
 -- 7. TENANT ISOLATION ROW LEVEL SECURITY POLICIES
@@ -289,18 +289,18 @@ CREATE POLICY "notifications_tenant_select" ON notifications
   FOR SELECT TO authenticated
   USING (
     org_id = auth_org_id()
-    AND (is_hr_admin() OR employee_id = current_employee_id())
+    AND (is_hr_admin() OR recipient_employee_id = current_employee_id())
   );
 
 CREATE POLICY "notifications_tenant_modify" ON notifications
   FOR ALL TO authenticated
   USING (
     org_id = auth_org_id()
-    AND (is_hr_admin() OR employee_id = current_employee_id())
+    AND (is_hr_admin() OR recipient_employee_id = current_employee_id())
   )
   WITH CHECK (
     org_id = auth_org_id()
-    AND (is_hr_admin() OR employee_id = current_employee_id())
+    AND (is_hr_admin() OR recipient_employee_id = current_employee_id())
   );
 
 -- === TENANT-ISOLATED SHARED LINKS ===

@@ -21,10 +21,12 @@ import { cache } from 'react';
 // request, so there's no cross-request/cross-user staleness risk.
 export const createClient = cache(async function createClient() {
   const cookieStore = await cookies();
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-anon-key';
 
   return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    url,
+    anonKey,
     {
       cookieOptions: { name: 'sb-auth' },
       cookies: {
@@ -51,9 +53,11 @@ export const createClient = cache(async function createClient() {
 // session (e.g. resolving a shared-link token for the un-authenticated
 // manager view). Never import this into client-side code.
 export function createServiceClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-service-key';
   return createSupabaseJsClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    url,
+    serviceKey,
     { auth: { autoRefreshToken: false, persistSession: false } }
   );
 }

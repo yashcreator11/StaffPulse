@@ -79,7 +79,7 @@ CREATE TABLE IF NOT EXISTS policy_assignments (
   id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id          uuid NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
   policy_id       uuid NOT NULL REFERENCES leave_policies(id) ON DELETE CASCADE,
-  office_id       uuid REFERENCES offices(id) ON DELETE CASCADE,
+  office_code     text REFERENCES offices(code) ON DELETE CASCADE,
   department      text,
   employee_type   text DEFAULT 'full_time',
   priority        integer DEFAULT 0,

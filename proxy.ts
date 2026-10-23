@@ -32,17 +32,19 @@ export async function proxy(req: NextRequest) {
       return NextResponse.redirect(new URL('/master/login', req.url));
     }
 
-    const { data: admin } = await supabase
-      .from('platform_admins')
-      .select('id, role')
-      .eq('user_id', user.id)
-      .maybeSingle();
+    if (supabase) {
+      const { data: admin } = await supabase
+        .from('platform_admins')
+        .select('id, role')
+        .eq('user_id', user.id)
+        .maybeSingle();
 
-    if (!admin) {
-      if (wantsJson) {
-        return NextResponse.json({ error: 'Forbidden: Platform admin privileges required' }, { status: 403 });
+      if (!admin) {
+        if (wantsJson) {
+          return NextResponse.json({ error: 'Forbidden: Platform admin privileges required' }, { status: 403 });
+        }
+        return NextResponse.redirect(new URL('/master/login?error=forbidden', req.url));
       }
-      return NextResponse.redirect(new URL('/master/login?error=forbidden', req.url));
     }
 
     return response;
@@ -58,10 +60,12 @@ export async function proxy(req: NextRequest) {
   const isSharedView = req.nextUrl.searchParams.get('view') === '1';
   const isSharedLinkApi = pathname.startsWith('/api/shared-link');
   const isLoginPage = pathname.startsWith('/login') || isMasterLogin;
+  const isSignupPage = pathname.startsWith('/signup') || pathname.startsWith('/api/organizations/signup');
+  const isSetupPage = pathname.startsWith('/setup') || pathname.startsWith('/api/setup');
   const isAuthApi = pathname.startsWith('/api/auth');
   const isHealthApi = pathname.startsWith('/api/health');
 
-  if (isSharedView || isSharedLinkApi || isLoginPage || isAuthApi || isHealthApi) {
+  if (isSharedView || isSharedLinkApi || isLoginPage || isSignupPage || isSetupPage || isAuthApi || isHealthApi) {
     const { response } = await updateSession(req);
     return response;
   }
@@ -82,7 +86,7 @@ export async function proxy(req: NextRequest) {
   // ── Suspended Organization & Role Check ──────────────────────────────
   const isPrefetch = req.headers.get('next-router-prefetch') === '1' || req.headers.get('purpose') === 'prefetch';
 
-  if (!isPrefetch) {
+  if (!isPrefetch && supabase) {
     const { data: employee } = await supabase
       .from('employees')
       .select('role, org_id, deactivated_at, is_deleted, employment_status, organizations!employees_org_id_fkey(status)')

@@ -46,10 +46,12 @@ import { cache } from 'react';
 // stale session across different requests/users.
 export const createLeaveClient = cache(async function createLeaveClient() {
   const cookieStore = await cookies();
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-anon-key';
 
   return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    url,
+    anonKey,
     {
       cookieOptions: { name: 'sb-auth' },
       cookies: {
@@ -77,9 +79,11 @@ export const createLeaveClient = cache(async function createLeaveClient() {
 // service role key for the single merged project), not a LEAVE_-prefixed
 // key that no longer exists anywhere in the deployed env.
 export function createLeaveServiceClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-service-key';
   return createSupabaseJsClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    url,
+    serviceKey,
     { auth: { autoRefreshToken: false, persistSession: false } }
   );
 }

@@ -293,12 +293,12 @@ CREATE POLICY "approval_steps_modify" ON approval_steps
 -- === NOTIFICATIONS ===
 CREATE POLICY "notifications_select" ON notifications
   FOR SELECT TO authenticated
-  USING (is_hr_admin() OR employee_id = current_employee_id());
+  USING (is_hr_admin() OR recipient_employee_id = current_employee_id());
 
 CREATE POLICY "notifications_modify" ON notifications
   FOR ALL TO authenticated
-  USING (is_hr_admin() OR employee_id = current_employee_id())
-  WITH CHECK (is_hr_admin() OR employee_id = current_employee_id());
+  USING (is_hr_admin() OR recipient_employee_id = current_employee_id())
+  WITH CHECK (is_hr_admin() OR recipient_employee_id = current_employee_id());
 
 -- === WFH REQUESTS ===
 CREATE POLICY "wfh_requests_select" ON wfh_requests

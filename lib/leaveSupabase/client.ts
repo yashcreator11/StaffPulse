@@ -15,9 +15,11 @@ import { createBrowserClient } from '@supabase/ssr';
 // signed in) is enforced separately — see middleware.ts and each
 // app/leave/**/layout.tsx guard — this file only controls the session.
 export function createLeaveClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-anon-key';
   return createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    url,
+    anonKey,
     { cookieOptions: { name: 'sb-auth' } }
   );
 }
