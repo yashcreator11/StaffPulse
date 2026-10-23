@@ -280,7 +280,7 @@ _Build after Section B (multi-tenancy). This is the control room for your busine
 - [ ] Consent-based, time-limited, read-only impersonation with a visible banner and audit trail (support_access_grants) (P1)
 - [ ] Per-organization feature flags (P1)
 - [ ] Organization data export and deletion workflow with typed confirmation, ideally a second approver (P1)
-- [ ] Make suspended organizations unable to log in or call APIs, with a test (P0)
+- [x] Make suspended organizations unable to log in or call APIs, with a test (P0)
 - [ ] Platform metrics: MRR, trial conversion, churn, total employees (P2)
 - [ ] System health and failed-job monitoring (P2)
 - [ ] Announcements and maintenance notices to all or some organizations (P2)
