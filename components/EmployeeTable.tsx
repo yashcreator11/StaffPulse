@@ -1,6 +1,20 @@
 'use client';
 import { useState, useMemo, memo } from 'react';
-import { ChevronUp, ChevronDown, ChevronsUpDown, Search, Zap, AlertTriangle, X, Users, Info } from 'lucide-react';
+import {
+  ChevronUp,
+  ChevronDown,
+  ChevronsUpDown,
+  Search,
+  Zap,
+  AlertTriangle,
+  X,
+  Users,
+  Info,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+} from 'lucide-react';
 import { EmployeeSummary } from '@/lib/types';
 import { useDebounce } from '@/lib/useDebounce';
 
@@ -17,7 +31,7 @@ interface EmployeeTableProps {
 
 type SortKey = keyof EmployeeSummary;
 type SortDir = 'asc' | 'desc';
-const PAGE_SIZE = 50;
+const PAGE_SIZE_OPTIONS = [25, 50, 100, 250];
 
 const STATUS_BADGE: Record<string, string> = {
   green: 'bg-emerald-500/10 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30',
@@ -45,6 +59,7 @@ function EmployeeTable({
   const [sortKey, setSortKey] = useState<SortKey>('employeeName');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<number>(50);
 
   const greenMins = Math.round((avgHoursPctGreen / 100) * shiftTargetMins);
   const amberMins = Math.round((avgHoursPctAmber / 100) * shiftTargetMins);
@@ -67,12 +82,15 @@ function EmployeeTable({
     });
   }, [filtered, sortKey, sortDir]);
 
-  const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
   const currentPage = Math.min(page, totalPages);
   const pageData = useMemo(() => {
-    const start = (currentPage - 1) * PAGE_SIZE;
-    return sorted.slice(start, start + PAGE_SIZE);
-  }, [sorted, currentPage]);
+    const start = (currentPage - 1) * pageSize;
+    return sorted.slice(start, start + pageSize);
+  }, [sorted, currentPage, pageSize]);
+
+  const startRecord = sorted.length === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+  const endRecord = Math.min(currentPage * pageSize, sorted.length);
 
   function handleSort(key: SortKey) {
     if (sortKey === key) {
@@ -312,30 +330,76 @@ function EmployeeTable({
         </table>
       </div>
 
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between pt-2 text-sm flex-wrap gap-2">
-          <span className="text-[var(--text-muted)] text-xs">
-            Page <span className="font-semibold text-[var(--text-primary)]">{currentPage}</span> of <span className="font-semibold text-[var(--text-primary)]">{totalPages}</span> · {sorted.length} total employees
+      <div className="flex flex-col sm:flex-row items-center justify-between pt-3 text-xs text-[var(--text-muted)] gap-3 border-t border-[var(--border)] mt-2">
+        <div className="flex items-center gap-3">
+          <span>
+            Showing <strong className="text-[var(--text-primary)] font-semibold">{startRecord}</strong>–<strong className="text-[var(--text-primary)] font-semibold">{endRecord}</strong> of <strong className="text-[var(--text-primary)] font-semibold">{sorted.length}</strong> employees
           </span>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 pl-2 border-l border-[var(--border)]">
+            <span className="text-[11px] text-[var(--text-muted)]">Per page:</span>
+            <div className="flex items-center gap-1">
+              {PAGE_SIZE_OPTIONS.map((opt) => (
+                <button
+                  key={opt}
+                  onClick={() => {
+                    setPageSize(opt);
+                    setPage(1);
+                  }}
+                  className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors ${
+                    pageSize === opt
+                      ? 'bg-[var(--accent)] text-white font-bold'
+                      : 'bg-[var(--bg-elevated)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-card)] border border-[var(--border)]'
+                  }`}
+                >
+                  {opt}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {totalPages > 1 && (
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setPage(1)}
+              disabled={currentPage === 1}
+              title="First Page"
+              className="p-1.5 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-primary)] disabled:opacity-30 hover:border-[var(--accent)] transition-colors"
+            >
+              <ChevronsLeft className="w-3.5 h-3.5" />
+            </button>
             <button
               onClick={() => setPage(p => Math.max(1, p - 1))}
               disabled={currentPage === 1}
-              className="px-3 py-1.5 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-primary)] disabled:opacity-40 hover:border-[var(--accent)] text-xs font-medium transition-colors"
+              title="Previous Page"
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-primary)] disabled:opacity-30 hover:border-[var(--accent)] transition-colors font-medium text-xs"
             >
-              Previous
+              <ChevronLeft className="w-3.5 h-3.5" />
+              <span>Prev</span>
             </button>
-            <span className="text-xs font-mono text-[var(--text-muted)] px-1">{currentPage}/{totalPages}</span>
+            <span className="px-2 font-mono text-[var(--text-secondary)] font-medium">
+              {currentPage} / {totalPages}
+            </span>
             <button
               onClick={() => setPage(p => Math.min(totalPages, p + 1))}
               disabled={currentPage === totalPages}
-              className="px-3 py-1.5 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-primary)] disabled:opacity-40 hover:border-[var(--accent)] text-xs font-medium transition-colors"
+              title="Next Page"
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-primary)] disabled:opacity-30 hover:border-[var(--accent)] transition-colors font-medium text-xs"
             >
-              Next
+              <span>Next</span>
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => setPage(totalPages)}
+              disabled={currentPage === totalPages}
+              title="Last Page"
+              className="p-1.5 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-primary)] disabled:opacity-30 hover:border-[var(--accent)] transition-colors"
+            >
+              <ChevronsRight className="w-3.5 h-3.5" />
             </button>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

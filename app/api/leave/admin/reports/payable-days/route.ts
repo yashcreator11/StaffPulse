@@ -168,7 +168,7 @@ async function handleReport(req: NextRequest) {
       employeeCode: emp.employee_code,
       name: emp.full_name,
       department: emp.department ?? 'General',
-      office: emp.office ?? 'WonderBiz',
+      office: emp.office ?? 'Headquarters',
       employmentStatus: emp.employment_status,
       dateOfJoining: emp.date_of_joining,
       totalDaysInMonth: employeeGrossDays,

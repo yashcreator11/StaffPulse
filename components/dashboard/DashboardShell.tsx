@@ -98,6 +98,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Eye,
+  Fingerprint,
 } from 'lucide-react';
 import ThemeToggle from '@/components/ThemeToggle';
 
@@ -343,13 +344,13 @@ export default function DashboardShell({
       >
         <div className={`pt-5 pb-4 ${collapsed ? 'px-2' : 'px-4'}`}>
           <div className={`flex items-center ${collapsed ? 'justify-center' : 'gap-2.5'}`}>
-            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center flex-shrink-0">
-              <span className="text-white text-xs font-bold">WB</span>
+            <div className="w-8 h-8 bg-gradient-to-tr from-orange-600 to-amber-500 rounded-lg flex items-center justify-center flex-shrink-0 text-white shadow-sm">
+              <Fingerprint size={16} />
             </div>
             {!collapsed && (
               <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-[var(--text-primary)]">Attendance Dashboard</p>
-                <p className="truncate text-[11px] text-[var(--text-muted)]">WonderBiz Technologies</p>
+                <p className="truncate text-sm font-semibold text-[var(--text-primary)]">StaffPulse</p>
+                <p className="truncate text-[11px] text-[var(--text-muted)]">Attendance Dashboard</p>
               </div>
             )}
           </div>
@@ -414,10 +415,10 @@ export default function DashboardShell({
       <div className="md:hidden sticky top-0 z-30 border-b border-[var(--border)] bg-[var(--bg-surface)]/95 backdrop-blur">
         <div className="flex items-center justify-between gap-3 px-4 h-14">
           <div className="flex items-center gap-2 min-w-0">
-            <div className="w-7 h-7 bg-blue-600 rounded-lg flex items-center justify-center flex-shrink-0">
-              <span className="text-white text-[10px] font-bold">WB</span>
+            <div className="w-7 h-7 bg-gradient-to-tr from-orange-600 to-amber-500 rounded-lg flex items-center justify-center flex-shrink-0 text-white shadow-sm">
+              <Fingerprint size={14} />
             </div>
-            <p className="truncate text-sm font-semibold text-[var(--text-primary)]">Attendance Dashboard</p>
+            <p className="truncate text-sm font-semibold text-[var(--text-primary)]">StaffPulse</p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <ThemeToggle onChange={syncThemeToServer} />

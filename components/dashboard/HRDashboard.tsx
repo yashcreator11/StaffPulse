@@ -39,8 +39,10 @@ import OfficeCodePrompt from '@/components/OfficeCodePrompt';
 import KPICards from '@/components/KPICards';
 import OnLeaveTodayCard from '@/components/OnLeaveTodayCard';
 import EmployeeTable from '@/components/EmployeeTable';
+import InfoTooltip from '@/components/InfoTooltip';
 import DashboardShell, { type DashboardSectionId } from '@/components/dashboard/DashboardShell';
 import DashboardSkeleton from '@/components/dashboard/DashboardSkeleton';
+import FirstRunOnboardingCard from '@/components/dashboard/FirstRunOnboardingCard';
 
 // ── Lazily-loaded heavy components ──────────────────────────────────────────
 const ExportPanel = dynamic(() => import('@/components/ExportPanel'), { ssr: false });
@@ -294,26 +296,28 @@ export default function HRDashboard() {
     return () => window.removeEventListener('remap-headers', handler);
   }, []);
 
+  const loadInitialMonths = useCallback(async () => {
+    const months = await getUploadedMonths();
+    if (months.length === 0) {
+      // Genuinely empty deployment — no flash, this is the real state.
+      setAppState('upload');
+      return;
+    }
+    setUploadedMonths(months);
+    const monthParam = searchParams.get('month');
+    const officeParam = searchParams.get('office');
+    const deptParam = searchParams.get('dept');
+    const matchMonth = months.find(m => m.key === monthParam) ?? months[months.length - 1];
+    setSelectedMonthKey(matchMonth.key);
+    setAllRecords(await getRecords(matchMonth.key));
+    if (officeParam) setSelectedOffice(officeParam);
+    if (deptParam) setSelectedDepts(deptParam.split(',').filter(Boolean));
+    setAppState('dashboard');
+  }, [searchParams]);
+
   useEffect(() => {
-    (async () => {
-      const months = await getUploadedMonths();
-      if (months.length === 0) {
-        // Genuinely empty deployment — no flash, this is the real state.
-        setAppState('upload');
-        return;
-      }
-      setUploadedMonths(months);
-      const monthParam = searchParams.get('month');
-      const officeParam = searchParams.get('office');
-      const deptParam = searchParams.get('dept');
-      const matchMonth = months.find(m => m.key === monthParam) ?? months[months.length - 1];
-      setSelectedMonthKey(matchMonth.key);
-      setAllRecords(await getRecords(matchMonth.key));
-      if (officeParam) setSelectedOffice(officeParam);
-      if (deptParam) setSelectedDepts(deptParam.split(',').filter(Boolean));
-      setAppState('dashboard');
-    })();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    loadInitialMonths();
+  }, [loadInitialMonths]);
 
   const syncURL = useCallback((monthKey: string, office: string, depts: string[]) => {
     const params = new URLSearchParams();
@@ -796,9 +800,21 @@ export default function HRDashboard() {
         {/* True first-run empty state — no dashboard exists yet, so Upload
            renders full-page rather than as a modal (nothing to show behind it). */}
         {!hasDashboardData && appState === 'upload' && (
-          <div className="space-y-6">
-            <div className="text-[var(--text-muted)] text-xs">Upload one or more biometric export CSVs to get started</div>
-            <UploadZone onFiles={handleFiles} />
+          <div className="space-y-8">
+            <FirstRunOnboardingCard
+              onUploadCsvClick={() => {
+                const el = document.getElementById('upload-zone-section');
+                el?.scrollIntoView({ behavior: 'smooth' });
+              }}
+              onSampleDataLoaded={async () => {
+                showToast('success', 'Sample data loaded successfully! Welcome to your dashboard.');
+                await loadInitialMonths();
+              }}
+            />
+            <div id="upload-zone-section" className="space-y-4 pt-4 border-t border-[var(--border)]">
+              <div className="text-[var(--text-muted)] text-xs font-semibold">Or upload your own biometric export CSV directly:</div>
+              <UploadZone onFiles={handleFiles} />
+            </div>
           </div>
         )}
         {!hasDashboardData && appState === 'mapping' && mappingQueue.length > 0 && (
@@ -1166,18 +1182,26 @@ export default function HRDashboard() {
                 )}
                 <div id="section-employees" className="bg-[var(--bg-elevated)]/30 rounded-xl border border-[var(--border)] p-4">
                   <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
-                    <h2 className="text-[var(--text-primary)] font-semibold text-sm">
-                      {selectedDepts.length === 1 ? `Team Members — ${selectedDepts[0]}` : `All Employees — ${dateFrom}`}
-                      {tableFilter !== 'all' && (
-                        <span className="ml-2 text-xs text-[var(--text-muted)] font-normal">
-                          · filtered by <span className="text-blue-400 capitalize">{tableFilter}</span>
-                          <button onClick={() => setTableFilter('all')} className="ml-2 text-[var(--text-muted)] hover:text-[var(--text-muted)]">✕</button>
-                        </span>
-                      )}
-                      {selectedDepts.length === 1 && (
-                        <button onClick={clearDepts} className="ml-2 text-[var(--text-muted)] hover:text-[var(--text-muted)]">✕</button>
-                      )}
-                    </h2>
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-[var(--text-primary)] font-semibold text-sm">
+                        {selectedDepts.length === 1 ? `Team Members — ${selectedDepts[0]}` : `All Employees — ${dateFrom}`}
+                        {tableFilter !== 'all' && (
+                          <span className="ml-2 text-xs text-[var(--text-muted)] font-normal">
+                            · filtered by <span className="text-blue-400 capitalize">{tableFilter}</span>
+                            <button onClick={() => setTableFilter('all')} className="ml-2 text-[var(--text-muted)] hover:text-[var(--text-muted)]">✕</button>
+                          </span>
+                        )}
+                        {selectedDepts.length === 1 && (
+                          <button onClick={clearDepts} className="ml-2 text-[var(--text-muted)] hover:text-[var(--text-muted)]">✕</button>
+                        )}
+                      </h2>
+                      <InfoTooltip
+                        title="Daily Punch & Attendance Status"
+                        description="Shows punch timestamps, total logged shift duration, and late/early flags for the selected calendar day."
+                        formula="In/Out timestamps evaluated against office shift hours and grace period."
+                        example="Green = On Track (>=85% shift); Amber = Needs Attention (75-85%); Red = Critical (<75%)."
+                      />
+                    </div>
                     <span className="text-[var(--text-muted)] text-xs">{filteredSummaries.length} employees</span>
                   </div>
                   <EmployeeTable
@@ -1291,15 +1315,23 @@ export default function HRDashboard() {
                 </div>
                 <div id="section-employees" className="bg-[var(--bg-elevated)]/30 rounded-xl border border-[var(--border)] p-4">
                   <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
-                    <h2 className="text-[var(--text-primary)] font-semibold text-sm">
-                      Employee Summary
-                      {tableFilter !== 'all' && (
-                        <span className="ml-2 text-xs text-[var(--text-muted)] font-normal">
-                          · filtered by <span className="text-blue-400 capitalize">{tableFilter}</span>
-                          <button onClick={() => setTableFilter('all')} className="ml-2 text-[var(--text-muted)] hover:text-[var(--text-muted)]">✕</button>
-                        </span>
-                      )}
-                    </h2>
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-[var(--text-primary)] font-semibold text-sm">
+                        Employee Summary
+                        {tableFilter !== 'all' && (
+                          <span className="ml-2 text-xs text-[var(--text-muted)] font-normal">
+                            · filtered by <span className="text-blue-400 capitalize">{tableFilter}</span>
+                            <button onClick={() => setTableFilter('all')} className="ml-2 text-[var(--text-muted)] hover:text-[var(--text-muted)]">✕</button>
+                          </span>
+                        )}
+                      </h2>
+                      <InfoTooltip
+                        title="Monthly Workforce Compliance Summary"
+                        description="Aggregated working hours, late arrivals, absences, and shift adherence for all active personnel. Click any row to inspect their full monthly punch card."
+                        formula="Worst Status = Critical if avg hours < 75% or frequent short days; Amber if 75%–85%; On Track if >= 85%."
+                        example="Export audit-ready deduction spreadsheets from the Export panel or Reports menu."
+                      />
+                    </div>
                     <span className="text-[var(--text-muted)] text-xs">{filteredSummaries.length} employees</span>
                   </div>
                   <EmployeeTable

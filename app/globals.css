@@ -95,6 +95,7 @@
 html {
   max-width: 100vw;
   overflow-x: hidden;
+  scroll-behavior: smooth;
 }
 
 body {
@@ -145,30 +146,44 @@ body {
   box-shadow: var(--shadow-elevation);
 }
 
-/* Shared thin, theme-aware scrollbar */
-.scroll-thin {
+/* Global ultra-thin, sleek theme-aware scrollbars across all viewports & containers */
+*, html, body {
   scrollbar-width: thin;
   scrollbar-color: var(--border) transparent;
 }
 
-.scroll-thin::-webkit-scrollbar {
+::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 
-.scroll-thin::-webkit-scrollbar-track {
+::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.scroll-thin::-webkit-scrollbar-thumb {
+::-webkit-scrollbar-thumb {
   background-color: var(--border);
   border-radius: 9999px;
   border: 1px solid transparent;
   background-clip: content-box;
+  transition: background-color 0.2s ease;
 }
 
-.scroll-thin::-webkit-scrollbar-thumb:hover {
-  background-color: var(--text-muted);
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--accent);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Utility to completely hide scrollbars where appropriate (e.g. pill tabs, mobile chips) */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
 }
 
 /* Subtle glow badge */

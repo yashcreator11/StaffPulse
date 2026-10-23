@@ -1,7 +1,7 @@
-﻿'use client';
+'use client';
 import { useState, useRef, useMemo, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Download, FileSpreadsheet, FileText, FileIcon, ChevronDown, Loader2, X, Calendar, Building2, Users } from 'lucide-react';
+import { Download, FileSpreadsheet, FileText, FileIcon, ChevronDown, Loader2, X, Calendar, Building2, Users, Coins, ExternalLink } from 'lucide-react';
 import { UploadedMonth, Thresholds, Holiday, LeaveRecord, AttendanceRecord } from '@/lib/types';
 import { getRecords } from '@/lib/storage';
 import { getAllLeaveRecords } from '@/lib/leaveTrackerRead';
@@ -330,6 +330,20 @@ export default function ExportPanel({ uploadedMonths, thresholds, restrictToEmpl
                   <p className="text-amber-400">No data matches this selection — adjust the range, office, or departments.</p>
                 )}
               </div>
+
+              {/* Payroll Payable Days Direct Shortcut */}
+              <a
+                href="/leave/admin/reports/payable-days"
+                className="flex items-center justify-between p-3 rounded-xl bg-orange-500/10 border border-orange-500/25 text-orange-600 dark:text-orange-400 hover:bg-orange-500/15 transition-all text-xs group"
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <Coins className="w-4 h-4 text-orange-500 shrink-0" />
+                  <span className="font-semibold truncate">Need Statutory Payroll Payable Days?</span>
+                </div>
+                <span className="text-[11px] font-bold underline flex items-center gap-1 shrink-0">
+                  Open Report <ExternalLink className="w-3 h-3" />
+                </span>
+              </a>
             </div>
 
             {/* Download actions */}

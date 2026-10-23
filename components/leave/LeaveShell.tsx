@@ -25,6 +25,7 @@ import {
   FileSpreadsheet,
   CreditCard,
   ShieldCheck,
+  Fingerprint,
 } from 'lucide-react';
 import LeaveThemeSync from './LeaveThemeSync';
 import NotificationBell from './NotificationBell';
@@ -315,12 +316,12 @@ export default function LeaveShell({
         <div className={`pt-5 pb-4 ${collapsed ? 'px-2' : 'px-5'}`}>
           <div className={`flex items-center ${collapsed ? 'justify-center' : 'gap-3'}`}>
             <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[var(--accent)] to-[var(--accent-hover)] text-sm font-bold text-white shadow-lg shadow-[var(--accent)]/30 shrink-0">
-              L
+              <Fingerprint size={18} />
             </span>
             {!collapsed && (
               <div className="min-w-0">
-                <p className="truncate text-sm font-bold text-[var(--text-primary)] tracking-tight">Leave Tracker</p>
-                <p className="truncate text-[11px] text-[var(--text-muted)]">WonderBiz Technologies</p>
+                <p className="truncate text-sm font-bold text-[var(--text-primary)] tracking-tight">StaffPulse</p>
+                <p className="truncate text-[11px] text-[var(--text-muted)]">Leave Tracker</p>
               </div>
             )}
           </div>
@@ -456,10 +457,10 @@ export default function LeaveShell({
               </Link>
             )}
             <div className="flex items-center gap-2">
-              <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-gradient-to-br from-[var(--accent)] to-[var(--accent-hover)] text-[10px] font-bold text-white">
-                L
+              <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-gradient-to-br from-[var(--accent)] to-[var(--accent-hover)] text-white">
+                <Fingerprint size={12} />
               </span>
-              <p className="truncate text-sm font-bold text-[var(--text-primary)]">Leave Tracker</p>
+              <p className="truncate text-sm font-bold text-[var(--text-primary)]">StaffPulse Leave</p>
             </div>
           </div>
           <div className="flex items-center gap-1.5 shrink-0">

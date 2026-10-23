@@ -3,27 +3,22 @@ import { getCurrentEmployee } from '@/lib/leaveSupabase/getCurrentEmployee';
 import { createLeaveClient } from '@/lib/leaveSupabase/server';
 import { getManagedEmployeeIds } from '@/lib/leaveSupabase/organization';
 import DashboardClient from './DashboardClient';
+import LandingPage from '@/components/landing/LandingPage';
 
 // Single-login pivot — the Dashboard's entry point is now a Server
 // Component so the auth/role decision happens before any client code
 // runs, instead of the old client-only page guessing "any session = HR".
 //
 // Role → what they get:
-//   - hr / hr_super_admin : full Dashboard (DashboardClient renders
+//   - unauthenticated visitor : high-converting enterprise LandingPage showcase
+//   - hr / hr_super_admin     : full Dashboard (DashboardClient renders
 //     HRDashboard — upload, export, settings, everything, unchanged).
-//   - manager / lead        : NOT redirected away — rendered a read-only
+//   - manager / lead          : NOT redirected away — rendered a read-only
 //     view of the Dashboard scoped to their own team (direct reports),
 //     per the confirmed decision to reuse the existing read-only
 //     ManagerView UI with the underlying records filtered rather than
 //     building a second dashboard. See DashboardClient.tsx's 'team' mode.
-//   - employee               : never reaches this component at all —
-//     middleware.ts already redirects them to /leave/me before this
-//     runs. The redirect below is a second, redundant guard for the one
-//     path middleware doesn't cover (the legacy ?view=1 share-link query
-//     param bypasses middleware's role check on purpose — see
-//     middleware.ts — so this still needs its own check for the
-//     non-share-link case).
-//   - no session at all      : sent to the single /login page.
+//   - employee                : redirected to /leave/me.
 //
 // The legacy unauthenticated share-link view (?view=1&token=...) is left
 // completely alone here — it's handled entirely client-side in
@@ -43,7 +38,7 @@ export default async function Page({
 
   const employee = await getCurrentEmployee();
   if (!employee) {
-    redirect('/login');
+    return <LandingPage />;
   }
   if (employee.role === 'employee') {
     redirect('/leave/me');

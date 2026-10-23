@@ -57,6 +57,7 @@ export async function proxy(req: NextRequest) {
     return response;
   }
 
+  const isPublicLanding = pathname === '/' || pathname === '/terms' || pathname === '/privacy';
   const isSharedView = req.nextUrl.searchParams.get('view') === '1';
   const isSharedLinkApi = pathname.startsWith('/api/shared-link');
   const isLoginPage = pathname.startsWith('/login') || isMasterLogin;
@@ -64,8 +65,9 @@ export async function proxy(req: NextRequest) {
   const isSetupPage = pathname.startsWith('/setup') || pathname.startsWith('/api/setup');
   const isAuthApi = pathname.startsWith('/api/auth');
   const isHealthApi = pathname.startsWith('/api/health');
+  const isDemoApi = pathname.startsWith('/api/demo');
 
-  if (isSharedView || isSharedLinkApi || isLoginPage || isSignupPage || isSetupPage || isAuthApi || isHealthApi) {
+  if (isPublicLanding || isSharedView || isSharedLinkApi || isLoginPage || isSignupPage || isSetupPage || isAuthApi || isHealthApi || isDemoApi) {
     const { response } = await updateSession(req);
     return response;
   }

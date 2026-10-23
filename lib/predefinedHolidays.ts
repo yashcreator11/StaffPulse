@@ -1,10 +1,9 @@
 import { Holiday } from './types';
 
 // ── Predefined office holiday calendars ──────────────────────────────────────
-// These come straight from WonderBiz's official published holiday list for
-// each office/year. They are baked into the app so HR never has to add them
-// by hand — the dashboard picks them up automatically and flags those dates
-// as holidays everywhere (charts, KPIs, employee timelines, etc).
+// Standard published statutory and gazetted holiday calendars for
+// each office/year. Baked into the app so HR never has to add standard
+// national holidays by hand — the dashboard picks them up automatically.
 //
 // To add a new office or year, just add another entry below. HR can still
 // add ad-hoc/regional holidays on top of this list from the Holidays panel —

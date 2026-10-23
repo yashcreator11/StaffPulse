@@ -1,4 +1,4 @@
-// Parameterized leave cycle: defaults to WonderBiz (25-Mar to 24-Mar next year),
+// Parameterized leave cycle: defaults to standard corporate leave year (25-Mar to 24-Mar next year),
 // while supporting per-organization custom leave years (e.g. 1-Jan, 1-Apr).
 
 /** Returns the FY key (the year the cycle STARTS) for a given date. */

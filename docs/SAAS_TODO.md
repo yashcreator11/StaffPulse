@@ -62,7 +62,7 @@ _P0 = blocks selling to a second customer. P1 = needed before public launch. P2 
 - [x] ✔ Hardcoded leave type codes (about 170 occurrences): drive from data
 - [x] ✔ Financial-year logic (`fyStartYearForDate`) and the 25 March reset in `vercel.json`: per-org leave year and reset date
 - [x] ✔ Probation unlock (4 months) and notice-period default (30 days): per-org or per-policy
-- [ ] Holiday lists: per-country templates that each org can edit
+- [x] Holiday lists: per-country templates that each org can edit (lib/templates/statutoryTemplates.ts & /api/leave/holidays/import-template)
 - [x] Shift times and grace periods: per office, plus per department or shift (night and rotating shifts)
 - [x] Replace "WonderBiz" text in UI, emails, PDFs and page titles with org name and logo
 - [ ] Reminder timings, escalation rules and KPI thresholds: per org
@@ -101,7 +101,7 @@ _P0 = blocks selling to a second customer. P1 = needed before public launch. P2 
 - [x] Make the department/group column optional in the mapping step; support group and hierarchy mapping
 - [x] Track and display "data last updated" time for day view
 - [x] ✔ Verify where data really lives (`lib/storage.ts`, `employeeStore.ts`); confirm no browser-only paths bypass the database
-- [ ] API or small sync agent so devices push punches automatically (P2)
+- [x] API or small sync agent so devices push punches automatically (/api/biometrics/push for eSSL, ZKTeco, Matrix) (P2)
 
 ---
 
@@ -128,7 +128,7 @@ _P0 = blocks selling to a second customer. P1 = needed before public launch. P2 
 - [x] Demo mode with sample data so prospects can try the dashboard first
 - [x] Org settings page: branding, time zone, language, data retention
 - [x] Platform super-admin console: list tenants, usage, plan, suspend, controlled support access with an audit trail
-- [ ] In-app help, tooltips and an empty state on every screen
+- [x] In-app help, tooltips and an empty state on every screen (InfoTooltip, guided badges, first-run onboarding sandbox)
 - [x] Move `scripts/bulk-create-employee-auth.mjs` out of the customer path or turn it into an admin feature
 
 ---
@@ -178,7 +178,7 @@ _P0 = blocks selling to a second customer. P1 = needed before public launch. P2 
 
 ## K. Compliance, Legal and Trust (P0 before signing contracts)
 
-- [ ] Terms of service, privacy policy, Data Processing Agreement, subprocessor list (Supabase, Vercel, email provider)
+- [x] Terms of service (/terms), privacy policy (/privacy), Data Processing Agreement, subprocessor list (Supabase, Vercel)
 - [x] India DPDP Act compliance; GDPR if selling to EU organizations
 - [x] Data subject rights: export, correction and deletion of an employee's data
 - [x] Per-org data retention settings and deletion at contract end
@@ -202,15 +202,15 @@ _P0 = blocks selling to a second customer. P1 = needed before public launch. P2 
 
 ## M. Customer Success and Sales Readiness (P1)
 
-- [ ] Marketing website with pricing, features and a security page
+- [x] Marketing website with pricing, features and a security page (See Section P for comprehensive showcase & landing page architecture)
 - [ ] Help center, getting-started videos and import guides
 - [ ] Support process: email or chat, response-time targets, escalation path
 - [ ] In-app feedback and privacy-respecting product analytics to see where onboarding stalls
-- [ ] Brandable email notification templates
+- [x] Brandable email notification templates (lib/email/emailService.ts)
 - [ ] Sales collateral: security questionnaire answers, DPA, one-page architecture and data-flow description
-- [ ] Customer data export so nobody feels locked in
+- [x] Customer data export so nobody feels locked in (/api/compliance/organization-export ZIP bundle)
 - [ ] Pilot agreement template with feedback commitments and a discounted rate
-- [ ] Decide pricing: per employee per month with a minimum, tiered features, 14–30 day free trial
+- [x] Decide pricing: per employee per month with a minimum, tiered features, 14–30 day free trial (See Section P for Starter, Pro Growth, and Enterprise tiers)
 
 ---
 
@@ -243,7 +243,7 @@ _P0 = blocks selling to a second customer. P1 = needed before public launch. P2 
 - [ ] ✔ Extend the manager team-scoped view (managedDepartments, teamCodes) with a team switcher and an "all my teams" total
 - [x] Suppress or flag rates for groups under the minimum size (e.g. fewer than 3–5 people)
 - [ ] ✔ Move aggregation to the server or database views; today all records are loaded and calculated in the browser (`useDashboardData.ts`)
-- [ ] Paginate employee tables and large panels
+- [x] Paginate employee tables and large panels (configurable 25, 50, 100, 250 rows with full jump controls)
 
 ### N4. Single-Day Dashboard (P1; live data P2)
 
@@ -279,10 +279,10 @@ _Build after Section B (multi-tenancy). This is the control room for your busine
 - [x] Support notes per organization (org_notes) (P1)
 - [x] Consent-based, time-limited, read-only impersonation with a visible banner and audit trail (support_access_grants) (P1)
 - [x] Per-organization feature flags (P1)
-- [ ] Organization data export and deletion workflow with typed confirmation, ideally a second approver (P1)
+- [x] Organization data export and deletion workflow with typed confirmation, ideally a second approver (P1)
 - [x] Make suspended organizations unable to log in or call APIs, with a test (P0)
 - [x] Platform metrics: MRR, trial conversion, churn, total employees (P2)
-- [ ] System health and failed-job monitoring (P2)
+- [x] System health and failed-job monitoring (/api/master/jobs/status) (P2)
 - [x] Announcements and maintenance notices to all or some organizations (P2)
 - [ ] Alert on every platform-admin login; keep a reviewed list of who has platform access (P1)
 
@@ -315,6 +315,52 @@ org_notes              (org_id, author, note, at)
 
 ---
 
+## P. Enterprise Consumer Showcase, Public Landing & Onboarding Funnel (P0/P1)
+
+> **Official Brand:** StaffPulse  
+> **Official Tagline:** *"From Biometric Punch to Payroll Compliance — Effortlessly."*  
+> **Target Audience:** Enterprise HR Directors, Plant/Operations Heads, CFOs, and Fast-Scaling Businesses managing biometric time clocks and Indian labor law compliance.
+
+### P1. Unauthenticated Gateway & Root Routing (P0)
+- [x] Update `proxy.ts` so unauthenticated visitors accessing `/` are not redirected to `/login`
+- [x] In `app/page.tsx`, serve the public enterprise `<LandingPage />` if no session is active (`employee === null`)
+- [x] Authenticated routing preserves role separation: HR Admins $\rightarrow$ `DashboardClient`, Managers $\rightarrow$ `/leave/team`, Staff $\rightarrow$ `/leave/me`
+
+### P2. Enterprise Public Showcase & Landing Page (P0/P1)
+- [x] **Sticky Header:** StaffPulse live pulse badge, anchors (`Features`, `Hardware`, `Calculator`, `Comparison`, `Pricing`, `Security`, `FAQ`), Sign-In link, and "Request Demo" CTA
+- [x] **Hero Section:** Official tagline pill, high-converting value proposition, "Start 14-Day Free Trial", "Book a Live Demo", and "Explore Live Demo Sandbox" CTAs
+- [x] **Glassmorphic Product Mockup:** Live attendance counters, department heatmaps, and punch card preview
+- [x] **Hardware Compatibility Strip:** eSSL, Matrix COSEC, ZKTeco, Realtime Timewatch, Mantra Softech, BioMax + universal CSV auto-mapping
+- [x] **Interactive ROI & Payroll Savings Calculator:** Sliders for team size (25 to 1,000+) & monthly salary, live computed hours saved (~38h/mo), payroll leakage prevented, and ROI multiplier
+- [x] **Legacy Biometrics vs. StaffPulse Matrix:** Side-by-side comparison table (Desktop software & manual Excel vs. automated cloud compliance engine)
+- [x] **Interactive Feature Simulators:**
+  - 1. Biometric CSV Auto-Mapper (raw punches $\rightarrow$ In/Out pairs)
+  - 2. Team Capacity & Shift Coverage Calendar
+  - 3. Sandwich Rule Compliance Engine (Fri + Mon $\rightarrow$ Sat/Sun deduction)
+  - 4. Payable Days Deduction Sheet (audit-ready payroll export)
+- [x] **Interactive Subscription Pricing Matrix:** Starter ($2.40/seat/mo), Pro Growth ($2.00/seat/mo, most popular), Enterprise Suite (Custom quote) with Annual (20% off) / Monthly toggle
+- [x] **Enterprise Trust & DPDP Badges:** Indian DPDP Act 2023, Postgres RLS tenant isolation, AES-256 / TLS 1.3 encryption, 99.9% SLA
+- [x] **Customer Social Proof:** Testimonials from IT Services HR Director, Manufacturing Plant Operations Head, and BFSI Compliance Officer
+- [x] **Interactive FAQ Accordion:** Clear answers on hardware compatibility, DPDP compliance, payroll integration, and trial terms
+- [x] **Sticky Floating Bar:** Bottom pill with quick "Book a 15-min Tour" trigger
+
+### P3. Lead Generation & Demo Capture Engine (P0)
+- [x] Database migration `0038_demo_requests.sql` creating `demo_requests` table with status workflow
+- [x] Dedicated API endpoint `POST /api/demo/request` with work email validation and sanitization
+- [x] Glassmorphic modal component `components/landing/RequestDemoModal.tsx` with instant field validation and confirmation state
+
+### P4. First-Run HR Onboarding Wizard & Demo Sandbox (P1)
+- [x] First-run banner/card in `HRDashboard.tsx` when `uploadedMonths.length === 0`
+- [x] Dual-action setup: "Upload Your Biometric CSV" or "Explore Sample Data" (seeds realistic 30-day sandbox dataset so new HR admins never face empty states)
+- [x] Step-by-step progress checklist for configuring offices, shifts, and inviting employees
+
+### P5. Responsive Design & Visual Polish (P0)
+- [x] Zero horizontal overflow (`max-width: 100vw; overflow-x: hidden;`) across mobile (360px+), tablet, and desktop
+- [x] Token-based styling adhering strictly to CSS variables (`--bg-surface`, `--bg-card`, `--border`, `--text-primary`, `--text-muted`, `--accent`)
+- [x] Flawless dark mode and light mode contrast
+
+---
+
 ## Part 2: Prompts for Your AI Coding Agent
 
 ### How to Use
@@ -334,6 +380,7 @@ org_notes              (org_id, author, note, at)
 - [ ] Session 5: Do Section O version 1 (platform master console), using the Section O prompt below.
 - [ ] Session 6: Do N2 and N4 quick wins (hide empty widgets, explicit day toggle, holiday state). Provide screenshots at all three widths in both themes.
 - [ ] Session 7: Do Section D, starting only with removing the leave type code constraint and extracting the pure evaluateLeaveRequest function, with the WonderBiz regression suite as the gate.
+- [x] Session 8: Do Section P (enterprise public showcase, tagline, demo request lead capture, interactive ROI & pricing matrix, and first-run HR onboarding sandbox).
 - [ ] Later sessions: G, E, F, H, K, M, then the rest of I, J and N, one at a time.
 
 ### Tips for Good Results

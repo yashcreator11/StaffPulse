@@ -1,6 +1,8 @@
 'use client';
 import { useState, Suspense } from 'react';
+import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { Fingerprint, ArrowLeft } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 
 // The ONE login page for the whole app (single-login pivot — see
@@ -38,7 +40,7 @@ const OAUTH_ERROR_MESSAGES: Record<string, string> = {
   oauth_lookup_failed: 'Something went wrong looking up your account. Please try again.',
   no_employee_record:
     "We don't have an employee record for this email yet. Please contact HR to get set up, then try again.",
-  unauthorized_email: 'This email is not authorized to sign in to WonderBiz. Use your @wonderbiz.in account, or contact HR.',
+  unauthorized_email: 'This email is not authorized for this workspace. Please use your organization account or contact HR.',
   already_linked_elsewhere:
     'This email is already linked to a different account. Contact HR to sort this out before signing in with Google.',
   link_failed: 'Signed in with Google, but linking your account failed. Please contact HR.',
@@ -151,39 +153,62 @@ function LoginForm() {
   return (
     <div className="min-h-screen bg-[var(--bg-surface)] text-[var(--text-primary)] flex">
       {/* ── Left: branding ────────────────────────────────────────── */}
-      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-blue-700 via-blue-600 to-indigo-700 text-white flex-col justify-between p-12">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-white/15 backdrop-blur rounded-lg flex items-center justify-center">
-            <span className="text-white text-sm font-bold">WB</span>
+      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-orange-600 via-amber-600 to-blue-700 text-white flex-col justify-between p-12 relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-96 h-96 bg-white/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="flex items-center gap-3 relative z-10">
+          <div className="w-10 h-10 bg-white/20 backdrop-blur rounded-xl flex items-center justify-center shadow-lg">
+            <Fingerprint className="w-6 h-6 text-white" />
           </div>
-          <span className="font-semibold tracking-tight">WonderBiz Technologies</span>
+          <div>
+            <span className="font-extrabold text-lg tracking-tight">StaffPulse</span>
+            <div className="text-[10px] text-white/80 font-medium">Enterprise Attendance &amp; Compliance</div>
+          </div>
         </div>
-        <div className="space-y-3 max-w-md">
-          <h1 className="text-3xl font-semibold leading-tight">Attendance &amp; Leave, in one place.</h1>
-          <p className="text-blue-100 text-sm leading-relaxed">
-            Sign in to track attendance, apply for leave, and manage your team — all with the account your
-            organization already gave you.
+        <div className="space-y-4 max-w-md relative z-10">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-white/15 backdrop-blur border border-white/20">
+            <span>From Biometric Punch to Payroll Compliance</span>
+          </div>
+          <h1 className="text-3xl sm:text-4xl font-extrabold leading-tight">
+            Attendance &amp; Payroll Compliance, in one place.
+          </h1>
+          <p className="text-white/85 text-sm leading-relaxed">
+            Sign in to track attendance, verify punch logs, apply for leave, and manage your team — all with enterprise-grade security.
           </p>
         </div>
-        <p className="text-blue-200/70 text-xs">© {new Date().getFullYear()} WonderBiz Technologies</p>
+        <div className="flex items-center justify-between text-xs text-white/70 relative z-10">
+          <p>© {new Date().getFullYear()} StaffPulse. All rights reserved.</p>
+          <Link href="/" className="hover:text-white transition-colors flex items-center gap-1.5 font-medium">
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>Showcase</span>
+          </Link>
+        </div>
       </div>
 
       {/* ── Right: authentication ─────────────────────────────────── */}
       <div className="flex-1 flex items-center justify-center px-4 py-12">
         <div className="w-full max-w-sm">
-          <div className="flex items-center gap-3 mb-8 lg:hidden justify-center">
-            <div className="w-9 h-9 bg-blue-600 rounded-lg flex items-center justify-center">
-              <span className="text-white text-xs font-bold">WB</span>
+          <div className="flex items-center gap-3 mb-6 lg:hidden justify-center">
+            <div className="w-9 h-9 bg-gradient-to-tr from-orange-600 to-amber-500 rounded-xl flex items-center justify-center shadow-md text-white">
+              <Fingerprint className="w-5 h-5" />
             </div>
             <div>
-              <h1 className="text-[var(--text-primary)] font-semibold text-sm">WonderBiz Technologies</h1>
-              <p className="text-[var(--text-muted)] text-xs">Attendance &amp; Leave Tracker</p>
+              <h1 className="text-[var(--text-primary)] font-extrabold text-sm flex items-center gap-1.5">
+                <span>StaffPulse</span>
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              </h1>
+              <p className="text-[var(--text-muted)] text-xs">Attendance &amp; Payroll Compliance</p>
             </div>
           </div>
 
           <div className="mb-6 hidden lg:block">
-            <h2 className="text-xl font-semibold">Sign in</h2>
-            <p className="text-[var(--text-muted)] text-xs mt-1">Use your WonderBiz Google account.</p>
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-bold text-[var(--text-primary)]">Sign in</h2>
+              <Link href="/" className="text-xs text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors flex items-center gap-1">
+                <ArrowLeft className="w-3 h-3" />
+                <span>Showcase</span>
+              </Link>
+            </div>
+            <p className="text-[var(--text-muted)] text-xs mt-1">Use your organization credentials or company account.</p>
           </div>
 
           <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl p-6 sm:p-8 space-y-5 shadow-xl">
@@ -242,7 +267,7 @@ function LoginForm() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className="w-full bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl px-3.5 py-2.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/30 focus:border-[var(--accent)] transition-all"
-                    placeholder="you@wonderbiz.in"
+                    placeholder="you@company.com"
                   />
                 </div>
                 <div>

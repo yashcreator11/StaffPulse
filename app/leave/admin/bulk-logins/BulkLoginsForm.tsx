@@ -150,7 +150,7 @@ export default function BulkLoginsForm() {
         <textarea
           value={csvText}
           onChange={(e) => handlePreview(e.target.value)}
-          placeholder={'employee_code,full_name,login_email,password,status\n1,"Anirudha Choudhari",anirudha.choudhari@wonderbiz.in,Anirudha@123,OK'}
+          placeholder={'employee_code,full_name,login_email,password,status\n1,"Anirudha Choudhari",anirudha.choudhari@company.com,Anirudha@123,OK'}
           rows={10}
           className="w-full bg-[var(--bg-surface)] border border-[var(--border)] rounded-lg px-3 py-2 text-xs font-mono text-[var(--text-primary)]"
         />

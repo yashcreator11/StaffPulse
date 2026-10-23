@@ -6,7 +6,7 @@ import {
 } from './useDashboardData';
 import { isHoliday } from './holidays';
 
-let CURRENT_COMPANY_NAME = 'WonderBiz Technologies';
+let CURRENT_COMPANY_NAME = 'StaffPulse';
 
 export function setExportCompanyName(name: string) {
   if (name && name.trim()) {
