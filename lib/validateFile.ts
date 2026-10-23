@@ -75,3 +75,22 @@ export const FIELD_LABELS: Record<string, string> = {
   duration: 'Duration',
   department: 'Department (Optional)',
 };
+
+/**
+ * Sanitizes cell values to prevent CSV / Spreadsheet formula injection attacks (CSV Injection / DDE).
+ * Strips or prefixes leading '=', '+', '-', '@', '\t', '\r' when exported or parsed.
+ */
+export function sanitizeSpreadsheetCell(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  const str = String(value).trim();
+  if (/^[=+\-@\t\r]/.test(str)) {
+    // Prefix with apostrophe to force Excel/Sheets to treat as literal string
+    return `'${str}`;
+  }
+  return str;
+}
+
+export function isSuspiciousSpreadsheetCell(value: unknown): boolean {
+  if (typeof value !== 'string') return false;
+  return /^[=+\-@\t\r]/.test(value.trim());
+}

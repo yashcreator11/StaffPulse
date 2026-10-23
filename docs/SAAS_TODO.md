@@ -26,11 +26,11 @@ _P0 = blocks selling to a second customer. P1 = needed before public launch. P2 
 - [ ] ✔ Audit all 37 files using the service-role client; each must verify the caller and scope queries to their organization
 - [x] ✔ Replace `xlsx@0.18.5` (high-severity advisories, no npm fix); re-run `npm audit` and clear the remaining 8 findings
 - [x] ✔ Use timing-safe comparison for `CRON_SECRET` and add it to `.env.example`
-- [ ] Rate limiting on login, upload and API routes
+- [x] Rate limiting on login, upload and API routes
 - [x] Security headers (CSP, HSTS, frame options)
-- [ ] File upload validation: size limit, type check, malicious-spreadsheet handling
+- [x] File upload validation: size limit, type check, malicious-spreadsheet handling
 - [x] Expiry cleanup for shared links; let admins revoke them
-- [ ] Secret scanning and dependency scanning in CI
+- [x] Secret scanning and dependency scanning in CI
 - [ ] Independent penetration test before enterprise sales (P1)
 - [ ] Revoke the GitHub token that was pasted in chat, and never commit tokens
 - [x] (added) Fix the open redirect in the OAuth callback: accept only paths starting with a single slash in the next parameter
@@ -166,11 +166,11 @@ _P0 = blocks selling to a second customer. P1 = needed before public launch. P2 
 
 ## J. Code Quality and Maintainability (P1)
 
-- [ ] ✔ Rewrite the README: it still describes a no-backend, localStorage-only, Basic-auth app
+- [x] ✔ Rewrite the README: it still describes a no-backend, localStorage-only, Basic-auth app
 - [ ] ✔ Reduce `any` types (114 uses) and enable strict type checking
 - [ ] ✔ Break up very large files: `DashboardClient` (1.7k lines), `Charts` (1.9k), policy engine (1.4k), `attendanceEscalation` (0.9k); split along widget-registry boundaries
 - [ ] Consolidate duplicated logic between Dashboard and Leave Tracker (two Supabase client sets, two theme systems)
-- [ ] ✔ Clean up stray or dead files (e.g. `app/api/leave/admin/fnf-route.ts` next to `fnf/route.ts`)
+- [x] ✔ Clean up stray or dead files (e.g. `app/api/leave/admin/fnf-route.ts` next to `fnf/route.ts`)
 - [ ] Consistent API error format and Zod input validation on every route
 - [ ] Architecture decision log
 
