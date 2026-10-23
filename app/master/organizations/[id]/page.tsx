@@ -66,6 +66,11 @@ export default function OrganizationDetailPage() {
   const [addingNote, setAddingNote] = useState(false);
   const [featureFlags, setFeatureFlags] = useState<Array<{ id: string; feature_key: string; is_enabled: boolean }>>([]);
 
+  // Onboarding Funnel & Usage Snapshots
+  const [funnel, setFunnel] = useState<Array<{ stage: string; label: string; isCompleted: boolean; completedAt: string | null }>>([]);
+  const [usageHistory, setUsageHistory] = useState<Array<{ id: string; snapshot_date: string; active_employees: number; total_leaves_recorded: number; total_punches: number; storage_mb: number }>>([]);
+  const [capturingSnapshot, setCapturingSnapshot] = useState(false);
+
   const fetchOrgDetails = React.useCallback(async () => {
     if (!orgId) return;
     setLoading(true);
@@ -80,10 +85,12 @@ export default function OrganizationDetailPage() {
         setSeatLimit(data.organization.seat_limit || 100);
       }
 
-      // Fetch V2 Notes and Feature Flags
-      const [notesRes, flagsRes] = await Promise.all([
+      // Fetch V2 Notes, Feature Flags, Onboarding Funnel, and Usage Snapshots
+      const [notesRes, flagsRes, funnelRes, usageRes] = await Promise.all([
         fetch(`/api/master/notes?orgId=${orgId}`),
         fetch(`/api/master/feature-flags?orgId=${orgId}`),
+        fetch(`/api/master/organizations/${orgId}/onboarding`),
+        fetch(`/api/master/organizations/${orgId}/usage?limit=7`),
       ]);
       if (notesRes.ok) {
         const nData = await notesRes.json();
@@ -92,6 +99,14 @@ export default function OrganizationDetailPage() {
       if (flagsRes.ok) {
         const fData = await flagsRes.json();
         setFeatureFlags(fData.featureFlags || []);
+      }
+      if (funnelRes.ok) {
+        const fnData = await funnelRes.json();
+        setFunnel(fnData.funnel || []);
+      }
+      if (usageRes.ok) {
+        const uData = await usageRes.json();
+        setUsageHistory(uData.history || []);
       }
     } catch {
       // ignore
@@ -348,6 +363,140 @@ export default function OrganizationDetailPage() {
               ))}
             </div>
           )}
+        </div>
+      </div>
+
+      {/* Section: Onboarding Funnel & Nightly Usage Snapshots */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Onboarding Lifecycle Funnel */}
+        <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl p-6 shadow-sm space-y-4">
+          <div className="flex items-center justify-between pb-3 border-b border-[var(--border)]">
+            <div>
+              <h2 className="font-bold text-base">Onboarding Lifecycle & Activation</h2>
+              <p className="text-xs text-[var(--text-muted)]">Real-time setup milestone completion</p>
+            </div>
+            <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-500">
+              {funnel.filter((f) => f.isCompleted).length} / {funnel.length || 5} Done
+            </span>
+          </div>
+
+          <div className="space-y-3">
+            {funnel.length === 0 ? (
+              <p className="text-xs text-[var(--text-muted)] py-4 text-center">Loading onboarding status...</p>
+            ) : (
+              funnel.map((step, idx) => (
+                <div
+                  key={step.stage}
+                  className={`flex items-start justify-between p-3 rounded-xl border text-xs transition ${
+                    step.isCompleted
+                      ? 'bg-emerald-500/5 border-emerald-500/20'
+                      : 'bg-[var(--bg-secondary)] border-[var(--border)] opacity-80'
+                  }`}
+                >
+                  <div className="flex items-start gap-2.5">
+                    <div
+                      className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold mt-0.5 ${
+                        step.isCompleted
+                          ? 'bg-emerald-500 text-white'
+                          : 'bg-slate-300 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
+                      }`}
+                    >
+                      {step.isCompleted ? '✓' : idx + 1}
+                    </div>
+                    <div>
+                      <p className={`font-semibold ${step.isCompleted ? 'text-emerald-700 dark:text-emerald-300' : ''}`}>
+                        {step.label}
+                      </p>
+                      <p className="text-[10px] text-[var(--text-muted)] font-mono">{step.stage}</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <span
+                      className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
+                        step.isCompleted
+                          ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                          : 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
+                      }`}
+                    >
+                      {step.isCompleted ? 'Completed' : 'Pending'}
+                    </span>
+                    {step.completedAt && (
+                      <p className="text-[9px] text-[var(--text-muted)] mt-0.5">
+                        {new Date(step.completedAt).toLocaleDateString()}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* Nightly Usage Snapshots */}
+        <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl p-6 shadow-sm space-y-4">
+          <div className="flex items-center justify-between pb-3 border-b border-[var(--border)]">
+            <div>
+              <h2 className="font-bold text-base">Usage Snapshots & Aggregates</h2>
+              <p className="text-xs text-[var(--text-muted)]">Roll-up usage history for billing & sizing</p>
+            </div>
+            <button
+              type="button"
+              disabled={capturingSnapshot}
+              onClick={async () => {
+                setCapturingSnapshot(true);
+                try {
+                  const res = await fetch(`/api/master/organizations/${orgId}/usage`, { method: 'POST' });
+                  if (res.ok) {
+                    const data = await res.json();
+                    if (data.snapshot) {
+                      setUsageHistory((prev) => [data.snapshot, ...prev.filter((p) => p.snapshot_date !== data.snapshot.snapshot_date)]);
+                    }
+                  }
+                } finally {
+                  setCapturingSnapshot(false);
+                }
+              }}
+              className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition flex items-center gap-1.5 disabled:opacity-50"
+            >
+              {capturingSnapshot ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+              {capturingSnapshot ? 'Capturing...' : 'Capture Snapshot'}
+            </button>
+          </div>
+
+          <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+            {usageHistory.length === 0 ? (
+              <p className="text-xs text-[var(--text-muted)] py-8 text-center">
+                No snapshots recorded yet. Click above to generate an initial baseline snapshot.
+              </p>
+            ) : (
+              <div className="border border-[var(--border)] rounded-xl overflow-hidden text-xs">
+                <table className="w-full text-left">
+                  <thead className="bg-[var(--bg-secondary)] border-b border-[var(--border)] text-[10px] font-semibold text-[var(--text-muted)] uppercase">
+                    <tr>
+                      <th className="p-2.5">Date</th>
+                      <th className="p-2.5">Active Staff</th>
+                      <th className="p-2.5">Attendance</th>
+                      <th className="p-2.5">Leaves</th>
+                      <th className="p-2.5 text-right">Storage</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[var(--border)]">
+                    {usageHistory.map((s) => (
+                      <tr key={s.id || s.snapshot_date} className="hover:bg-[var(--bg-secondary)]/50">
+                        <td className="p-2.5 font-mono text-[11px]">{s.snapshot_date}</td>
+                        <td className="p-2.5 font-semibold">{s.active_employees}</td>
+                        <td className="p-2.5 text-[var(--text-muted)]">{s.total_punches.toLocaleString()}</td>
+                        <td className="p-2.5 text-[var(--text-muted)]">{s.total_leaves_recorded}</td>
+                        <td className="p-2.5 text-right font-mono text-[11px] text-indigo-600 dark:text-indigo-400">
+                          {s.storage_mb} MB
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

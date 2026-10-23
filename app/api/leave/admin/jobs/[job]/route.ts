@@ -7,22 +7,14 @@ import { runLeaveThresholdCheck } from '@/lib/leaveSupabase/thresholdCheck';
 import { runEscalationSweep } from '@/lib/leaveSupabase/attendanceEscalation';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-const JOBS = ['probation-accrual', 'annual-reset', 'pending-leave-reminders', 'leave-threshold-check', 'attendance-escalation-sweep'] as const;
+const JOBS = [
+  'probation-accrual',
+  'annual-reset',
+  'pending-leave-reminders',
+  'leave-threshold-check',
+  'attendance-escalation-sweep',
+] as const;
 type Job = (typeof JOBS)[number];
-
-// D7-1: these two SQL functions already exist (schema.sql migration
-// 002) and already do the right math — this route is purely the
-// "wiring a scheduler" MoSCoW called for, not a reimplementation.
-//
-// Neither function is idempotent by itself: fn_apply_probation_month_
-// accrual does `accrued = accrued + v_credit` and fn_annual_leave_reset
-// does `opening_balance = opening_balance + v_carry_forward` — calling
-// either twice for the same period really would double-credit, which is
-// exactly what the Day 7 AC ("hitting a job endpoint twice in a row does
-// not double-credit or double-reset anything") is checking. So this
-// route checks balance_transactions for a matching audit row from a
-// previous run BEFORE calling the RPC, and skips if one already exists,
-// rather than modifying the SQL functions themselves.
 
 function monthsSinceDOJ(doj: string, asOf: Date): number {
   const d = new Date(`${doj}T00:00:00Z`);
@@ -31,14 +23,19 @@ function monthsSinceDOJ(doj: string, asOf: Date): number {
   return Math.max(months, 0);
 }
 
-async function runProbationAccrual(service: SupabaseClient, asOf: Date) {
+async function runProbationAccrualForOrg(service: SupabaseClient, orgId: string, asOf: Date) {
   const { data: employees, error: empError } = await service
     .from('employees')
     .select('id, date_of_joining')
+    .eq('org_id', orgId)
     .not('date_of_joining', 'is', null);
   if (empError) throw new Error(empError.message);
 
-  const { data: plType, error: plError } = await service.from('leave_types').select('id').eq('code', 'PL').single();
+  const { data: plType, error: plError } = await service
+    .from('leave_types')
+    .select('id')
+    .eq('code', 'PL')
+    .maybeSingle();
   if (plError || !plType) throw new Error(plError?.message ?? 'PL leave type not found');
 
   const results: { employeeId: string; completedMonth: number; ran: boolean; reason: string }[] = [];
@@ -64,9 +61,6 @@ async function runProbationAccrual(service: SupabaseClient, asOf: Date) {
       continue;
     }
 
-    // Idempotency guard: fn_apply_probation_month_accrual always writes a
-    // balance_transactions note containing "month <N>" for this exact
-    // completed_month — if one's already there, this month was already run.
     const { data: existing } = await service
       .from('balance_transactions')
       .select('id')
@@ -92,18 +86,23 @@ async function runProbationAccrual(service: SupabaseClient, asOf: Date) {
     });
   }
 
-  return { job: 'probation-accrual', ranCount: results.filter((r) => r.ran).length, results };
+  return { job: 'probation-accrual', orgId, ranCount: results.filter((r) => r.ran).length, results };
 }
 
-async function runAnnualReset(service: SupabaseClient, asOf: Date) {
-  // The FY that just ended, rolling into the current one — same 25-Mar
-  // cutover as everywhere else (getFYStartYear(asOf) - 1).
+async function runAnnualResetForOrg(service: SupabaseClient, orgId: string, asOf: Date) {
   const oldFyStartYear = getFYStartYear(asOf) - 1;
 
-  const { data: employees, error: empError } = await service.from('employees').select('id');
+  const { data: employees, error: empError } = await service
+    .from('employees')
+    .select('id')
+    .eq('org_id', orgId);
   if (empError) throw new Error(empError.message);
 
-  const { data: plType, error: plError } = await service.from('leave_types').select('id').eq('code', 'PL').single();
+  const { data: plType, error: plError } = await service
+    .from('leave_types')
+    .select('id')
+    .eq('code', 'PL')
+    .maybeSingle();
   if (plError || !plType) throw new Error(plError?.message ?? 'PL leave type not found');
 
   const results: { employeeId: string; ran: boolean; reason: string }[] = [];
@@ -139,12 +138,6 @@ async function runAnnualReset(service: SupabaseClient, asOf: Date) {
       continue;
     }
 
-    // Idempotency guard: fn_annual_leave_reset always logs against the
-    // OLD fy's balance row with a note mentioning that FY, whether or not
-    // there was anything to carry forward/encash/lapse (all three reasons
-    // share the same "FY<old> close" phrasing) — so any existing
-    // carry_forward/encashment/lapse row for this balance means this
-    // employee's reset already ran.
     const { data: existing } = await service
       .from('balance_transactions')
       .select('id')
@@ -165,29 +158,16 @@ async function runAnnualReset(service: SupabaseClient, asOf: Date) {
     results.push({ employeeId: emp.id, ran: !rpcError, reason: rpcError ? rpcError.message : 'Reset applied' });
   }
 
-  return { job: 'annual-reset', oldFyStartYear, ranCount: results.filter((r) => r.ran).length, results };
+  return { job: 'annual-reset', orgId, oldFyStartYear, ranCount: results.filter((r) => r.ran).length, results };
 }
 
-// Feedback item #11 — "If a leave application remains unapproved for
-// the requested date(s), trigger an automatic reminder to manager +
-// employee." Reuses sendLeaveReminder's existing 'pending_request'
-// mode (previously manager-triggered-only from the Approvals queue) —
-// this job just decides WHICH pending requests qualify and calls it,
-// once per request per day.
-//
-// "Remains unapproved for the requested date(s)" = the request's
-// start_date has arrived (today >= start_date) and it's still pending —
-// i.e. the leave is happening/has happened with no decision made,
-// which is the sharpest version of "overdue" available without a
-// separate configurable SLA-days knob. Dedup: skip a request if a
-// 'leave_reminder' notification referencing it was already created
-// today, so re-running this job the same day never double-sends.
-async function runPendingLeaveReminders(service: SupabaseClient, asOf: Date) {
+async function runPendingLeaveRemindersForOrg(service: SupabaseClient, orgId: string, asOf: Date) {
   const today = asOf.toISOString().slice(0, 10);
 
   const { data: pending, error } = await service
     .from('leave_requests')
     .select('id, start_date')
+    .eq('org_id', orgId)
     .eq('status', 'pending')
     .lte('start_date', today);
   if (error) throw new Error(error.message);
@@ -213,45 +193,88 @@ async function runPendingLeaveReminders(service: SupabaseClient, asOf: Date) {
     results.push({ requestId: req.id, sent: outcome.ok, reason: outcome.ok ? 'Reminder sent' : outcome.error ?? 'Unknown error' });
   }
 
-  return { job: 'pending-leave-reminders', ranCount: results.filter((r) => r.sent).length, results };
+  return { job: 'pending-leave-reminders', orgId, ranCount: results.filter((r) => r.sent).length, results };
 }
 
-// Feedback item #4 — weekly per-leave-type threshold breach check (see
-// lib/leaveSupabase/thresholdCheck.ts for the "why a rolling 7-day
-// window" reasoning). Idempotency is handled inside that function via
-// leave_threshold_alerts' unique(leave_type_id, week_start).
-async function runLeaveThresholdCheckJob(service: SupabaseClient, asOf: Date) {
-  const { results, error } = await runLeaveThresholdCheck(service, asOf);
+async function runLeaveThresholdCheckJobForOrg(service: SupabaseClient, orgId: string, asOf: Date) {
+  const { results, error } = await runLeaveThresholdCheck(service, asOf, orgId);
   if (error) throw new Error(error);
-  return { job: 'leave-threshold-check', alertedCount: results.filter((r) => r.alerted).length, results };
+  return { job: 'leave-threshold-check', orgId, alertedCount: results.filter((r) => r.alerted).length, results };
 }
 
-// Wires runEscalationSweep (lib/leaveSupabase/attendanceEscalation.ts) —
-// the automated half of the "unmark leave" reminder flow (§C.5's hybrid
-// delivery, same escalation_reminders counter the manual "Remind now"
-// button uses). vercel.json has scheduled this job's path since the
-// escalation feature shipped, but it was never actually added to the
-// JOBS list below, so the daily cron 404'd silently and only manual
-// reminders were ever going out. Fixed as of this change.
-async function runAttendanceEscalationSweepJob(service: SupabaseClient) {
-  const results = await runEscalationSweep(service);
-  return { job: 'attendance-escalation-sweep', sentCount: results.filter((r) => r.sent).length, results };
+async function runAttendanceEscalationSweepJobForOrg(service: SupabaseClient, orgId: string) {
+  const results = await runEscalationSweep(service, orgId);
+  return { job: 'attendance-escalation-sweep', orgId, sentCount: results.filter((r) => r.sent).length, results };
 }
 
-async function runJob(job: Job) {
+async function runJobForOrg(job: Job, orgId: string, service: SupabaseClient, now: Date) {
+  if (job === 'probation-accrual') return runProbationAccrualForOrg(service, orgId, now);
+  if (job === 'annual-reset') return runAnnualResetForOrg(service, orgId, now);
+  if (job === 'pending-leave-reminders') return runPendingLeaveRemindersForOrg(service, orgId, now);
+  if (job === 'attendance-escalation-sweep') return runAttendanceEscalationSweepJobForOrg(service, orgId);
+  return runLeaveThresholdCheckJobForOrg(service, orgId, now);
+}
+
+// Multi-tenant cron execution loop with failure isolation per organization
+async function runJob(job: Job, specificOrgId?: string) {
   const service = createLeaveServiceClient();
   const now = new Date();
-  if (job === 'probation-accrual') return runProbationAccrual(service, now);
-  if (job === 'annual-reset') return runAnnualReset(service, now);
-  if (job === 'pending-leave-reminders') return runPendingLeaveReminders(service, now);
-  if (job === 'attendance-escalation-sweep') return runAttendanceEscalationSweepJob(service);
-  return runLeaveThresholdCheckJob(service, now);
+
+  // If specific organization requested, run only for that org
+  if (specificOrgId) {
+    return runJobForOrg(job, specificOrgId, service, now);
+  }
+
+  // Otherwise, fetch all active non-suspended organizations and iterate with tenant isolation
+  const { data: orgs, error: orgError } = await service
+    .from('organizations')
+    .select('id, name, status')
+    .neq('status', 'suspended');
+
+  if (orgError) {
+    throw new Error(`Failed to list organizations: ${orgError.message}`);
+  }
+
+  const tenantResults: {
+    orgId: string;
+    orgName: string;
+    success: boolean;
+    error?: string;
+    result?: unknown;
+  }[] = [];
+
+  for (const org of orgs || []) {
+    try {
+      const res = await runJobForOrg(job, org.id, service, now);
+      tenantResults.push({
+        orgId: org.id,
+        orgName: org.name,
+        success: true,
+        result: res,
+      });
+    } catch (err: unknown) {
+      console.error(`Job "${job}" failed for tenant "${org.name}" (${org.id}):`, err);
+      tenantResults.push({
+        orgId: org.id,
+        orgName: org.name,
+        success: false,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  const successfulTenants = tenantResults.filter((t) => t.success).length;
+  const failedTenants = tenantResults.filter((t) => !t.success).length;
+
+  return {
+    job,
+    totalTenants: tenantResults.length,
+    successfulTenants,
+    failedTenants,
+    tenantResults,
+  };
 }
 
-// D7-2: GET is the path Vercel Cron actually calls (crons can only issue
-// GET requests) — gated by CRON_SECRET instead of a browser session,
-// since there is no logged-in HR user behind a scheduled trigger. See
-// vercel.json.
 export async function GET(req: NextRequest, { params }: { params: Promise<{ job: string }> }) {
   const { job } = await params;
   if (!JOBS.includes(job as Job)) {
@@ -274,8 +297,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ job:
     return NextResponse.json({ error: 'Not authorized — this endpoint is for the scheduler only' }, { status: 401 });
   }
 
+  const specificOrgId = req.nextUrl.searchParams.get('org_id') || undefined;
+
   try {
-    const result = await runJob(job as Job);
+    const result = await runJob(job as Job, specificOrgId);
     return NextResponse.json(result);
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
@@ -283,9 +308,6 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ job:
   }
 }
 
-// Interactive path for an HR admin to trigger a job manually (e.g. to
-// catch up after a missed cron run) — session-gated, restricted to the
-// 'hr' / 'hr_super_admin' roles.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ job: string }> }) {
   const { job } = await params;
   if (!JOBS.includes(job as Job)) {
@@ -302,7 +324,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ job
 
   const { data: caller } = await sessionClient
     .from('employees')
-    .select('id, role')
+    .select('id, role, org_id')
     .eq('auth_user_id', user.id)
     .maybeSingle();
   if (!caller || (caller.role !== 'hr' && caller.role !== 'hr_super_admin')) {
@@ -310,7 +332,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ job
   }
 
   try {
-    const result = await runJob(job as Job);
+    const targetOrgId = caller.org_id || '00000000-0000-0000-0000-000000000001';
+    const result = await runJob(job as Job, targetOrgId);
     return NextResponse.json(result);
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';

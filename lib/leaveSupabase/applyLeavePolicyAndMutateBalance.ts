@@ -427,7 +427,7 @@ async function createAndMaybeApprove(
 
   const { data: employee, error: empError } = await service
     .from('employees')
-    .select('id, employee_code, office, full_name, date_of_joining, employment_status, date_of_exit, notice_period_days, probation_months')
+    .select('id, employee_code, office, full_name, date_of_joining, employment_status, date_of_exit, notice_period_days, probation_months, org_id')
     .eq('id', employeeId)
     .single();
   if (empError || !employee) {
@@ -493,9 +493,9 @@ async function createAndMaybeApprove(
   let leaveTypeForInsert: LeaveTypeRow = leaveType;
   let autoLwpReason: string | null = null;
   let autoLwpTypeRow: LeaveTypeRow | null = null;
+  const { config } = await getLeavePolicyConfig(service);
 
   if (leaveType.code !== 'LWP') {
-    const { config } = await getLeavePolicyConfig(service);
     autoLwpReason = getAutoLwpConversionReason(
       employee as EmployeeForConversionCheck,
       startDate,
@@ -517,11 +517,31 @@ async function createAndMaybeApprove(
   }
 
   const initialStatus: 'approved' | 'pending' = source === 'hr_manual' ? 'approved' : 'pending';
+  const targetOrgId = employee.org_id || '00000000-0000-0000-0000-000000000001';
+
+  const { data: activePolicy } = await service
+    .from('leave_policies')
+    .select('id, name, version_id')
+    .eq('org_id', targetOrgId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
 
   const { data: created, error: insertError } = await service
     .from('leave_requests')
     .insert({
       employee_id: employeeId,
+      org_id: targetOrgId,
+      policy_id: activePolicy?.id ?? null,
+      policy_version_id: activePolicy?.version_id ?? null,
+      policy_snapshot: {
+        policyName: activePolicy?.name ?? 'Standard Policy',
+        policyId: activePolicy?.id ?? null,
+        evaluatedAt: new Date().toISOString(),
+        probationMonths: employee.probation_months ?? config.probationUnlockMonths,
+        autoLwpReason: autoLwpReason ?? null,
+        totalDays,
+      },
       leave_type_id: leaveTypeForInsert.id,
       start_date: startDate,
       end_date: effectiveEndDate,

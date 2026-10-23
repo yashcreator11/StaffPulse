@@ -835,14 +835,17 @@ export interface EscalationSweepResult {
   reason: string;
 }
 
-export async function runEscalationSweep(service: SupabaseClient): Promise<EscalationSweepResult[]> {
+export async function runEscalationSweep(service: SupabaseClient, orgId?: string): Promise<EscalationSweepResult[]> {
   const results: EscalationSweepResult[] = [];
 
-  const { data: unmarked } = await service
+  let unmarkedQuery = service
     .from('attendance_exceptions')
     .select('id')
     .eq('resolution', 'pending')
     .is('employee_choice', null);
+  if (orgId) unmarkedQuery = unmarkedQuery.eq('org_id', orgId);
+  const { data: unmarked } = await unmarkedQuery;
+
   for (const row of unmarked ?? []) {
     const outcome = await sendEscalationReminder(service, 'attendance_exception_unmarked', row.id, 'automatic');
     results.push({
@@ -853,11 +856,14 @@ export async function runEscalationSweep(service: SupabaseClient): Promise<Escal
     });
   }
 
-  const { data: pendingHalfDays } = await service
+  let pendingHalfDaysQuery = service
     .from('attendance_exceptions')
     .select('leave_request_id')
     .eq('employee_choice', 'half_day')
     .not('leave_request_id', 'is', null);
+  if (orgId) pendingHalfDaysQuery = pendingHalfDaysQuery.eq('org_id', orgId);
+  const { data: pendingHalfDays } = await pendingHalfDaysQuery;
+
   for (const row of pendingHalfDays ?? []) {
     if (!row.leave_request_id) continue;
     const outcome = await sendEscalationReminder(service, 'leave_request_pending', row.leave_request_id, 'automatic');
@@ -869,11 +875,14 @@ export async function runEscalationSweep(service: SupabaseClient): Promise<Escal
     });
   }
 
-  const { data: pendingRegularisations } = await service
+  let pendingRegularisationsQuery = service
     .from('attendance_exceptions')
     .select('regularisation_id')
     .eq('employee_choice', 'regularise')
     .not('regularisation_id', 'is', null);
+  if (orgId) pendingRegularisationsQuery = pendingRegularisationsQuery.eq('org_id', orgId);
+  const { data: pendingRegularisations } = await pendingRegularisationsQuery;
+
   for (const row of pendingRegularisations ?? []) {
     if (!row.regularisation_id) continue;
     const outcome = await sendEscalationReminder(service, 'regularisation_pending', row.regularisation_id, 'automatic');

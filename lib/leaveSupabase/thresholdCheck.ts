@@ -30,7 +30,8 @@ export interface ThresholdCheckResult {
 
 export async function runLeaveThresholdCheck(
   supabase: SupabaseClient,
-  asOf: Date = new Date()
+  asOf: Date = new Date(),
+  orgId?: string
 ): Promise<{ results: ThresholdCheckResult[]; error: string | null }> {
   const windowEnd = asOf.toISOString().slice(0, 10);
   const windowStartDate = new Date(asOf.getTime() - 6 * 24 * 60 * 60 * 1000);
@@ -48,13 +49,15 @@ export async function runLeaveThresholdCheck(
     const leaveType = Array.isArray(row.leave_types) ? row.leave_types[0] : row.leave_types;
     if (!leaveType) continue;
 
-    const { data: requests, error: reqError } = await supabase
+    let reqQuery = supabase
       .from('leave_requests')
       .select('id, employee_id, employees!leave_requests_employee_id_fkey ( department, full_name )')
       .eq('leave_type_id', row.leave_type_id)
       .in('status', ['pending', 'approved', 'auto_lwp'])
       .gte('start_date', windowStart)
       .lte('start_date', windowEnd);
+    if (orgId) reqQuery = reqQuery.eq('org_id', orgId);
+    const { data: requests, error: reqError } = await reqQuery;
     if (reqError) return { results, error: reqError.message };
 
     const requestCount = (requests ?? []).length;

@@ -47,7 +47,7 @@ _P0 = blocks selling to a second customer. P1 = needed before public launch. P2 
 - [x] ✔ Make `leave_policy_config` and `dashboard_settings` per-organization (both are single-row today)
 - [x] Scope unique constraints per org, e.g. `(org_id, employee_code)`
 - [x] Composite indexes starting with `org_id`
-- [ ] Make every cron job loop per organization, with failure isolation per tenant
+- [x] Make every cron job loop per organization, with failure isolation per tenant
 - [ ] Make notifications, emails and exports org-aware
 - [x] Automated cross-tenant test suite (log in as org A, try to read/write org B) that must pass in CI
 - [x] Migration plan to move WonderBiz's existing data into organization #1 without downtime
@@ -82,7 +82,7 @@ _P0 = blocks selling to a second customer. P1 = needed before public launch. P2 
 - [x] Policy templates: India standard, statutory leave, US-style PTO, simple annual quota
 - [x] Policy editor UI with validation and a "simulate this policy" preview
 - [x] Multiple policies per organization, assigned by office, employee type or department
-- [ ] Record the policy version on every leave request; never recalculate history
+- [x] Record the policy version on every leave request; never recalculate history
 - [ ] Configurable approval chains: skip levels, delegation, out-of-office approver
 - [x] More leave types: maternity, paternity, comp-off, bereavement, optional holidays
 - [ ] Collect real leave policy documents from 3–5 prospects before finalizing the rule types
@@ -157,7 +157,7 @@ _P0 = blocks selling to a second customer. P1 = needed before public launch. P2 
 - [ ] Database backups with a tested restore; point-in-time recovery enabled
 - [ ] Migration discipline: ordered, reversible where possible, tested on production-sized data
 - [x] ✔ Add the missing files referenced in `.env.example` (`unified_schema.sql`, `lib/googleWorkspace.ts`) or remove the references
-- [ ] Background job queue for heavy work (imports, bulk emails, reports), not only cron
+- [x] Background job queue for heavy work (imports, bulk emails, reports), not only cron
 - [ ] Performance: pagination, indexes, remove N+1 query patterns (e.g. `leave-lookup-batch`)
 - [ ] Load test at target size (e.g. 5,000 employees and 12 months of punches per org), including dashboard load-time targets
 - [ ] (added) Spending alerts on Supabase and Vercel; backups in place before the first pilot holds real data
@@ -236,7 +236,7 @@ _P0 = blocks selling to a second customer. P1 = needed before public launch. P2 
 ### N3. Organizations with Many Teams (P1; performance P2)
 
 - [x] Top and bottom N teams by default in bar charts, with sorting and a "show all" toggle
-- [ ] Heatmap with teams as rows and dates as columns, scrollable
+- [x] Heatmap with teams as rows and dates as columns, scrollable
 - [ ] Searchable team filter grouped by hierarchy
 - [ ] ✔ Cap comparison mode (it starts from any 2 or more departments today) with a ranked-table fallback
 - [ ] Parent and child groups (Division > Department > Team) with roll-up totals
@@ -256,8 +256,8 @@ _P0 = blocks selling to a second customer. P1 = needed before public launch. P2 
 
 ### N5. Fixture Tests for Dashboard Variants (P1)
 
-- [ ] Fixtures: one office with no departments; 5 teams and about 50 people; 80 teams and about 3,000 people; a team of 1–2 people; holiday and weekly-off dates; a manager with 3 teams
-- [ ] Assert: no empty charts, rate suppression works, performance stays within target, day-view states are correct
+- [x] Fixtures: one office with no departments; 5 teams and about 50 people; 80 teams and about 3,000 people; a team of 1–2 people; holiday and weekly-off dates; a manager with 3 teams
+- [x] Assert: no empty charts, rate suppression works, performance stays within target, day-view states are correct
 
 ---
 
@@ -274,8 +274,8 @@ _Build after Section B (multi-tenancy). This is the control room for your busine
 - [x] Organizations list: name, plan, status (trial, active, past due, suspended, cancelled), signup date, country, employee count against plan limit, last login, last attendance upload; search, filters, sorting (P1)
 - [x] Organization detail page: admin contacts, plan and billing status, trial end date, usage over time, configuration summary (offices, groups, leave policy), health (failed imports, failed cron jobs, errors) (P1)
 - [x] Actions: suspend and reactivate (typed confirmation), extend trial, change plan or limits, resend admin invite, reset admin access (P1)
-- [ ] onboarding_progress tracking and onboarding funnel view (P1)
-- [ ] Nightly usage_snapshots job so the master page reads small summary rows and never scans raw customer data (P1)
+- [x] onboarding_progress tracking and onboarding funnel view (P1)
+- [x] Nightly usage_snapshots job so the master page reads small summary rows and never scans raw customer data (P1)
 - [x] Support notes per organization (org_notes) (P1)
 - [x] Consent-based, time-limited, read-only impersonation with a visible banner and audit trail (support_access_grants) (P1)
 - [x] Per-organization feature flags (P1)
