@@ -23,6 +23,8 @@ import {
   Home,
   CalendarClock,
   FileSpreadsheet,
+  CreditCard,
+  ShieldCheck,
 } from 'lucide-react';
 import LeaveThemeSync from './LeaveThemeSync';
 import NotificationBell from './NotificationBell';
@@ -86,12 +88,8 @@ function navGroups(role: LeaveRole, pendingApprovalsCount: number): NavGroup[] {
         { href: '/leave/admin/violations', label: 'Violations', icon: ShieldAlert },
         { href: '/leave/admin/organization', label: 'Organization', icon: Building2 },
         { href: '/leave/admin/config', label: 'Leave Configuration', icon: Settings },
-        // "Create Login" nav item hidden per HR's request — the
-        // Acknowledge & Set Up flow (NewJoinersPanel on /leave/admin)
-        // now links a login automatically for anyone who signed in
-        // with Google, and Add Employee (also hidden, same reasoning)
-        // covers the rest. Still accessible at /leave/admin/bulk-logins.
-        // { href: '/leave/admin/bulk-logins', label: 'Create Login', icon: KeyRound },
+        { href: '/leave/admin/billing', label: 'Billing & Plans', icon: CreditCard },
+        { href: '/leave/admin/compliance', label: 'Compliance & DPDP', icon: ShieldCheck },
       ],
     });
   }

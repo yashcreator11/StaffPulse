@@ -60,6 +60,12 @@ export default function OrganizationDetailPage() {
   const [seatLimit, setSeatLimit] = useState(100);
   const [savingPlan, setSavingPlan] = useState(false);
 
+  // V2 Notes & Feature Flags state
+  const [notes, setNotes] = useState<Array<{ id: string; author_email: string; note: string; created_at: string }>>([]);
+  const [newNote, setNewNote] = useState('');
+  const [addingNote, setAddingNote] = useState(false);
+  const [featureFlags, setFeatureFlags] = useState<Array<{ id: string; feature_key: string; is_enabled: boolean }>>([]);
+
   const fetchOrgDetails = React.useCallback(async () => {
     if (!orgId) return;
     setLoading(true);
@@ -72,6 +78,20 @@ export default function OrganizationDetailPage() {
         setAdmins(data.adminContacts || []);
         setSelectedPlan(data.organization.plan);
         setSeatLimit(data.organization.seat_limit || 100);
+      }
+
+      // Fetch V2 Notes and Feature Flags
+      const [notesRes, flagsRes] = await Promise.all([
+        fetch(`/api/master/notes?orgId=${orgId}`),
+        fetch(`/api/master/feature-flags?orgId=${orgId}`),
+      ]);
+      if (notesRes.ok) {
+        const nData = await notesRes.json();
+        setNotes(nData.notes || []);
+      }
+      if (flagsRes.ok) {
+        const fData = await flagsRes.json();
+        setFeatureFlags(fData.featureFlags || []);
       }
     } catch {
       // ignore
@@ -328,6 +348,122 @@ export default function OrganizationDetailPage() {
               ))}
             </div>
           )}
+        </div>
+      </div>
+
+      {/* V2 Section: Feature Flags & Internal Support Notes */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Organization Feature Flags */}
+        <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl p-6 shadow-sm space-y-4">
+          <div className="flex items-center justify-between pb-3 border-b border-[var(--border)]">
+            <h2 className="font-bold text-base">Tenant Feature Entitlements</h2>
+            <span className="text-[11px] text-[var(--text-muted)] font-mono">org_feature_flags</span>
+          </div>
+
+          <div className="space-y-3">
+            {[
+              { key: 'sso_google', label: 'Google Workspace Single Sign-On' },
+              { key: 'sso_m365', label: 'Microsoft 365 OAuth Login' },
+              { key: 'sso_saml', label: 'SAML 2.0 / Okta SSO Integration' },
+              { key: 'advanced_analytics', label: 'Department Heatmap & Custom Metrics' },
+            ].map(({ key, label }) => {
+              const flag = featureFlags.find((f) => f.feature_key === key);
+              const isEnabled = flag ? flag.is_enabled : true;
+
+              return (
+                <div
+                  key={key}
+                  className="flex items-center justify-between p-3 rounded-xl bg-[var(--bg-secondary)] border border-[var(--border)] text-xs"
+                >
+                  <div>
+                    <p className="font-semibold">{label}</p>
+                    <p className="text-[10px] text-[var(--text-muted)] font-mono">{key}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const nextVal = !isEnabled;
+                      await fetch('/api/master/feature-flags', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ orgId, featureKey: key, isEnabled: nextVal }),
+                      });
+                      setFeatureFlags((prev) =>
+                        prev.map((f) => (f.feature_key === key ? { ...f, is_enabled: nextVal } : f))
+                      );
+                    }}
+                    className={`px-3 py-1 rounded-lg text-[11px] font-semibold transition ${
+                      isEnabled
+                        ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+                        : 'bg-slate-200 dark:bg-slate-800 text-slate-500'
+                    }`}
+                  >
+                    {isEnabled ? 'Enabled' : 'Disabled'}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Platform Support Notes (org_notes) */}
+        <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl p-6 shadow-sm space-y-4 flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between pb-3 border-b border-[var(--border)]">
+              <h2 className="font-bold text-base">Internal Support Notes</h2>
+              <span className="text-[11px] text-[var(--text-muted)] font-mono">Private to Platform</span>
+            </div>
+
+            <div className="space-y-3 mt-4 max-h-60 overflow-y-auto pr-1">
+              {notes.length === 0 ? (
+                <p className="text-xs text-[var(--text-muted)] py-4 text-center">No internal notes logged yet.</p>
+              ) : (
+                notes.map((n) => (
+                  <div key={n.id} className="p-3 rounded-xl bg-[var(--bg-secondary)] border border-[var(--border)] text-xs space-y-1">
+                    <div className="flex justify-between text-[10px] text-[var(--text-muted)]">
+                      <span className="font-medium text-[var(--text-primary)]">{n.author_email}</span>
+                      <span>{new Date(n.created_at).toLocaleString()}</span>
+                    </div>
+                    <p className="text-slate-700 dark:text-slate-300">{n.note}</p>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          <div className="pt-3 border-t border-[var(--border)] flex gap-2">
+            <input
+              type="text"
+              placeholder="Add support log note..."
+              value={newNote}
+              onChange={(e) => setNewNote(e.target.value)}
+              className="flex-1 rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)] px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+            <button
+              type="button"
+              disabled={addingNote || !newNote.trim()}
+              onClick={async () => {
+                setAddingNote(true);
+                try {
+                  const res = await fetch('/api/master/notes', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ orgId, note: newNote }),
+                  });
+                  const data = await res.json();
+                  if (res.ok) {
+                    setNotes((prev) => [data.note, ...prev]);
+                    setNewNote('');
+                  }
+                } finally {
+                  setAddingNote(false);
+                }
+              }}
+              className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold disabled:opacity-40"
+            >
+              Add Note
+            </button>
+          </div>
         </div>
       </div>
 

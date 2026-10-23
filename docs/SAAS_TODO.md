@@ -135,13 +135,13 @@ _P0 = blocks selling to a second customer. P1 = needed before public launch. P2 
 
 ## H. Billing and Plans (P1)
 
-- [ ] Choose a processor: Razorpay (India, GST invoicing) and/or Stripe (international)
-- [ ] Plans, trial period, per-employee pricing and monthly minimums
-- [ ] Feature flags by plan (SSO, API, audit log, advanced analytics)
-- [ ] Usage metering (active employees) with automatic invoice adjustments
-- [ ] Failed-payment handling: grace period, downgrade, read-only mode, then suspension
-- [ ] Customer billing portal: invoices, payment method, plan change, cancel
-- [ ] Tax handling: GST, VAT and tax IDs
+- [x] Choose a processor: Razorpay (India, GST invoicing) and/or Stripe (international)
+- [x] Plans, trial period, per-employee pricing and monthly minimums
+- [x] Feature flags by plan (SSO, API, audit log, advanced analytics)
+- [x] Usage metering (active employees) with automatic invoice adjustments
+- [x] Failed-payment handling: grace period, downgrade, read-only mode, then suspension
+- [x] Customer billing portal: invoices, payment method, plan change, cancel
+- [x] Tax handling: GST, VAT and tax IDs
 
 ---
 
@@ -179,10 +179,10 @@ _P0 = blocks selling to a second customer. P1 = needed before public launch. P2 
 ## K. Compliance, Legal and Trust (P0 before signing contracts)
 
 - [ ] Terms of service, privacy policy, Data Processing Agreement, subprocessor list (Supabase, Vercel, email provider)
-- [ ] India DPDP Act compliance; GDPR if selling to EU organizations
-- [ ] Data subject rights: export, correction and deletion of an employee's data
-- [ ] Per-org data retention settings and deletion at contract end
-- [ ] Immutable audit log: who changed leave, balances, roles, settings and exports, and when
+- [x] India DPDP Act compliance; GDPR if selling to EU organizations
+- [x] Data subject rights: export, correction and deletion of an employee's data
+- [x] Per-org data retention settings and deletion at contract end
+- [x] Immutable audit log: who changed leave, balances, roles, settings and exports, and when
 - [ ] Data residency decision (which region holds the data)
 - [ ] Encrypt sensitive fields where appropriate (leave reasons can contain health information)
 - [ ] Roadmap to SOC 2 or ISO 27001 (P2)
@@ -220,9 +220,9 @@ _P0 = blocks selling to a second customer. P1 = needed before public launch. P2 
 
 ### N1. Configuration-Driven Layout (P1)
 
-- [ ] Per-org `dashboard_config` table: grouping dimension, UI label, default view, enabled widgets, minimum group size for rates, maximum comparison groups
+- [x] Per-org `dashboard_config` table: grouping dimension, UI label, default view, enabled widgets, minimum group size for rates, maximum comparison groups
 - [ ] ✔ Rename "department" to a generic "group" in `types.ts`, hooks, charts and filters; show each customer's own label (Department, Team, Branch, Project)
-- [ ] Widget registry: each panel declares the data it needs and renders only when that data exists
+- [x] Widget registry: each panel declares the data it needs and renders only when that data exists
 - [ ] Role presets: HR sees everything, managers see their groups, executives see a summary-only view
 
 ### N2. Organizations with No Teams (P0/P1)
@@ -249,9 +249,9 @@ _P0 = blocks selling to a second customer. P1 = needed before public launch. P2 
 
 - [x] ✔ Keep the existing single-day mode, and make view mode an explicit toggle instead of a side effect of filters
 - [x] Date picker with Today, Yesterday and Previous working day shortcuts
-- [ ] Per-org default landing view (Today, Month or Comparison)
+- [x] Per-org default landing view (Today, Month or Comparison)
 - [x] "Holiday / weekly off, no attendance expected" state instead of 0% attendance
-- [ ] Day view content: expected vs present, absent without leave, on leave, WFH, late arrivals with times, early departures, missed punches, team snapshot, optional arrival timeline
+- [x] Day view content: expected vs present, absent without leave, on leave, WFH, late arrivals with times, early departures, missed punches, team snapshot, optional arrival timeline
 - [ ] Live "today" data via the device sync API (see E); until then, show when data was last updated
 
 ### N5. Fixture Tests for Dashboard Variants (P1)
@@ -276,14 +276,14 @@ _Build after Section B (multi-tenancy). This is the control room for your busine
 - [x] Actions: suspend and reactivate (typed confirmation), extend trial, change plan or limits, resend admin invite, reset admin access (P1)
 - [ ] onboarding_progress tracking and onboarding funnel view (P1)
 - [ ] Nightly usage_snapshots job so the master page reads small summary rows and never scans raw customer data (P1)
-- [ ] Support notes per organization (org_notes) (P1)
-- [ ] Consent-based, time-limited, read-only impersonation with a visible banner and audit trail (support_access_grants) (P1)
-- [ ] Per-organization feature flags (P1)
+- [x] Support notes per organization (org_notes) (P1)
+- [x] Consent-based, time-limited, read-only impersonation with a visible banner and audit trail (support_access_grants) (P1)
+- [x] Per-organization feature flags (P1)
 - [ ] Organization data export and deletion workflow with typed confirmation, ideally a second approver (P1)
 - [x] Make suspended organizations unable to log in or call APIs, with a test (P0)
-- [ ] Platform metrics: MRR, trial conversion, churn, total employees (P2)
+- [x] Platform metrics: MRR, trial conversion, churn, total employees (P2)
 - [ ] System health and failed-job monitoring (P2)
-- [ ] Announcements and maintenance notices to all or some organizations (P2)
+- [x] Announcements and maintenance notices to all or some organizations (P2)
 - [ ] Alert on every platform-admin login; keep a reviewed list of who has platform access (P1)
 
 ### Design Rules

@@ -31,6 +31,16 @@ interface OrgItem {
 
 export default function MasterOrganizationsPage() {
   const [orgs, setOrgs] = useState<OrgItem[]>([]);
+  const [metrics, setMetrics] = useState<{
+    totalOrganizations: number;
+    activeOrganizations: number;
+    trialOrganizations: number;
+    suspendedOrganizations: number;
+    totalActiveEmployees: number;
+    estimatedMrrUsd: number;
+    annualRunRateUsd: number;
+    trialConversionRatePercent: number;
+  } | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -46,10 +56,17 @@ export default function MasterOrganizationsPage() {
   const fetchOrgs = React.useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/master/organizations?status=${statusFilter}&search=${encodeURIComponent(search)}`);
+      const [res, metricsRes] = await Promise.all([
+        fetch(`/api/master/organizations?status=${statusFilter}&search=${encodeURIComponent(search)}`),
+        fetch('/api/master/metrics'),
+      ]);
       const data = await res.json();
       if (res.ok) {
         setOrgs(data.organizations || []);
+      }
+      if (metricsRes.ok) {
+        const mData = await metricsRes.json();
+        setMetrics(mData.metrics);
       }
     } catch {
       // ignore
@@ -136,6 +153,48 @@ export default function MasterOrganizationsPage() {
           Add Organization
         </button>
       </div>
+
+      {/* Platform Metrics Hero Strip */}
+      {metrics && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-4 shadow-sm">
+            <span className="text-xs font-medium text-[var(--text-muted)]">Monthly Recurring (MRR)</span>
+            <div className="mt-1 text-2xl font-extrabold text-emerald-600 dark:text-emerald-400">
+              ${metrics.estimatedMrrUsd.toLocaleString()}
+            </div>
+            <div className="mt-0.5 text-[10px] text-[var(--text-muted)]">
+              ARR: ${(metrics.annualRunRateUsd).toLocaleString()}
+            </div>
+          </div>
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-4 shadow-sm">
+            <span className="text-xs font-medium text-[var(--text-muted)]">Active Organizations</span>
+            <div className="mt-1 text-2xl font-extrabold text-[var(--text-primary)]">
+              {metrics.activeOrganizations} <span className="text-xs font-normal text-[var(--text-muted)]">/ {metrics.totalOrganizations}</span>
+            </div>
+            <div className="mt-0.5 text-[10px] text-emerald-600 font-semibold">
+              {metrics.trialConversionRatePercent}% active rate
+            </div>
+          </div>
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-4 shadow-sm">
+            <span className="text-xs font-medium text-[var(--text-muted)]">Total Employees</span>
+            <div className="mt-1 text-2xl font-extrabold text-indigo-600 dark:text-indigo-400">
+              {metrics.totalActiveEmployees.toLocaleString()}
+            </div>
+            <div className="mt-0.5 text-[10px] text-[var(--text-muted)]">
+              Across all tenant workspaces
+            </div>
+          </div>
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-4 shadow-sm">
+            <span className="text-xs font-medium text-[var(--text-muted)]">Trials & Suspended</span>
+            <div className="mt-1 text-2xl font-extrabold text-amber-600 dark:text-amber-400">
+              {metrics.trialOrganizations} <span className="text-xs font-normal text-[var(--text-muted)]">trials</span>
+            </div>
+            <div className="mt-0.5 text-[10px] text-rose-500 font-semibold">
+              {metrics.suspendedOrganizations} suspended
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Filter and Search Bar */}
       <div className="flex flex-col md:flex-row gap-3 bg-[var(--bg-card)] p-3.5 rounded-2xl border border-[var(--border)] shadow-sm">
