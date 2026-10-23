@@ -4,6 +4,7 @@ import {
   homeRouteForRole,
   type EmployeeRole,
 } from '@/lib/leaveSupabase/getCurrentEmployee';
+import { isEmployeeDeactivated, isProviderAllowed, type AuthPolicy } from '@/lib/authPolicy';
 
 // GET /api/auth/callback — Supabase Google OAuth callback.
 //
@@ -81,9 +82,15 @@ export async function GET(req: NextRequest) {
   const domain = email.split('@')[1]?.toLowerCase() || '';
   const service = createServiceClient();
 
+  const rawProvider = (user.app_metadata?.provider || '').toLowerCase();
+  const providerType: 'google' | 'azure' = rawProvider.includes('azure') || rawProvider.includes('microsoft')
+    ? 'azure'
+    : 'google';
+
   // Check if domain matches any active organization or defaults to COMPANY_EMAIL_DOMAIN
   let isAllowedCompanyDomain = domain === COMPANY_EMAIL_DOMAIN;
   let matchedOrgId = '00000000-0000-0000-0000-000000000001';
+  let matchedOrgPolicy: AuthPolicy | undefined = undefined;
 
   try {
     const { data: orgs } = await service
@@ -99,12 +106,19 @@ export async function GET(req: NextRequest) {
         if (domains.includes(domain)) {
           isAllowedCompanyDomain = true;
           matchedOrgId = org.id;
+          matchedOrgPolicy = (org.settings as any)?.auth_policy;
           break;
         }
       }
     }
   } catch {
     // fallback to default
+  }
+
+  // Check provider against organization auth policy
+  if (matchedOrgPolicy && !isProviderAllowed(providerType, matchedOrgPolicy)) {
+    await supabase.auth.signOut();
+    return errorRedirect(origin, 'provider_not_allowed');
   }
 
   // -------------------------------------------------------------------------
@@ -114,7 +128,7 @@ export async function GET(req: NextRequest) {
   const { data: employee, error: lookupError } = await service
     .from('employees')
     .select(
-      'id, org_id, full_name, email, role, auth_user_id, google_id, profile_confirmed_at, must_change_password'
+      'id, org_id, full_name, email, role, auth_user_id, google_id, profile_confirmed_at, must_change_password, deactivated_at, employment_status, is_deleted'
     )
     .ilike('email', email)
     .maybeSingle();
@@ -122,6 +136,12 @@ export async function GET(req: NextRequest) {
   if (lookupError) {
     await supabase.auth.signOut();
     return errorRedirect(origin, 'oauth_lookup_failed');
+  }
+
+  // Check if employee has been deactivated / offboarded
+  if (employee && isEmployeeDeactivated(employee)) {
+    await supabase.auth.signOut();
+    return errorRedirect(origin, 'account_deactivated');
   }
 
   // -------------------------------------------------------------------------
@@ -200,7 +220,7 @@ export async function GET(req: NextRequest) {
 
   if (!employee.auth_user_id) {
     update.auth_user_id = user.id;
-    update.auth_provider = 'google';
+    update.auth_provider = providerType;
   }
 
   if (googleId && employee.google_id !== googleId) {

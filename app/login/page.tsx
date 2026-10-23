@@ -42,6 +42,9 @@ const OAUTH_ERROR_MESSAGES: Record<string, string> = {
   already_linked_elsewhere:
     'This email is already linked to a different account. Contact HR to sort this out before signing in with Google.',
   link_failed: 'Signed in with Google, but linking your account failed. Please contact HR.',
+  account_deactivated: 'Your account has been deactivated. Please contact your organization administrator or HR.',
+  provider_not_allowed: 'This sign-in method is not permitted by your organization security policy.',
+  org_suspended: 'Your organization has been suspended. Please contact platform support.',
 };
 
 function LoginForm() {
@@ -57,6 +60,7 @@ function LoginForm() {
   );
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [microsoftLoading, setMicrosoftLoading] = useState(false);
   const [showPasswordForm, setShowPasswordForm] = useState(false);
 
   async function handleGoogleSignIn() {
@@ -73,9 +77,25 @@ function LoginForm() {
       setGoogleLoading(false);
       setError(error.message);
     }
-    // On success the browser navigates away to Google, so there is
-    // nothing further to do here — app/api/auth/callback/route.ts takes
-    // it from there once Google redirects back.
+  }
+
+  async function handleMicrosoftSignIn() {
+    setError(null);
+    setMicrosoftLoading(true);
+    const supabase = createClient();
+    const next = searchParams.get('next');
+    const redirectTo = `${window.location.origin}/api/auth/callback${next ? `?next=${encodeURIComponent(next)}` : ''}`;
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'azure',
+      options: {
+        redirectTo,
+        scopes: 'email profile openid',
+      },
+    });
+    if (error) {
+      setMicrosoftLoading(false);
+      setError(error.message);
+    }
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -173,17 +193,29 @@ function LoginForm() {
               </div>
             )}
 
-            <button
-              type="button"
-              onClick={handleGoogleSignIn}
-              disabled={googleLoading}
-              className="w-full flex items-center justify-center gap-3 bg-white hover:bg-slate-50 disabled:opacity-60 text-slate-800 text-sm font-semibold py-3 rounded-xl border border-slate-200 shadow-sm hover:shadow transition-all duration-150"
-            >
-              <GoogleLogo />
-              {googleLoading ? 'Redirecting…' : 'Continue with Google'}
-            </button>
+            <div className="space-y-2.5">
+              <button
+                type="button"
+                onClick={handleGoogleSignIn}
+                disabled={googleLoading || microsoftLoading}
+                className="w-full flex items-center justify-center gap-3 bg-white hover:bg-slate-50 disabled:opacity-60 text-slate-800 text-sm font-semibold py-3 rounded-xl border border-slate-200 shadow-sm hover:shadow transition-all duration-150"
+              >
+                <GoogleLogo />
+                {googleLoading ? 'Redirecting…' : 'Continue with Google'}
+              </button>
+
+              <button
+                type="button"
+                onClick={handleMicrosoftSignIn}
+                disabled={googleLoading || microsoftLoading}
+                className="w-full flex items-center justify-center gap-3 bg-white hover:bg-slate-50 disabled:opacity-60 text-slate-800 text-sm font-semibold py-3 rounded-xl border border-slate-200 shadow-sm hover:shadow transition-all duration-150"
+              >
+                <MicrosoftLogo />
+                {microsoftLoading ? 'Redirecting…' : 'Continue with Microsoft 365'}
+              </button>
+            </div>
             <p className="text-[var(--text-muted)] text-[11px] text-center leading-relaxed">
-              Use your <span className="font-medium text-[var(--text-primary)]">@wonderbiz.in</span> account. New here? Google sign-in works once HR has added you.
+              Sign in with your organization account (Google Workspace or Microsoft 365).
             </p>
 
             <div className="flex items-center gap-3 py-1">
@@ -262,6 +294,17 @@ function GoogleLogo() {
         fill="#EA4335"
         d="M9 3.58c1.32 0 2.51.46 3.44 1.35l2.59-2.59C13.46.89 11.43 0 9 0A9 9 0 0 0 .96 4.95l3.01 2.33C4.68 5.16 6.66 3.58 9 3.58z"
       />
+    </svg>
+  );
+}
+
+function MicrosoftLogo() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 21 21" aria-hidden="true">
+      <rect x="1" y="1" width="9" height="9" fill="#f25022" />
+      <rect x="11" y="1" width="9" height="9" fill="#7fba00" />
+      <rect x="1" y="11" width="9" height="9" fill="#00a4ef" />
+      <rect x="11" y="11" width="9" height="9" fill="#ffb900" />
     </svg>
   );
 }

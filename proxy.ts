@@ -85,9 +85,24 @@ export async function proxy(req: NextRequest) {
   if (!isPrefetch) {
     const { data: employee } = await supabase
       .from('employees')
-      .select('role, org_id, organizations!employees_org_id_fkey(status)')
+      .select('role, org_id, deactivated_at, is_deleted, employment_status, organizations!employees_org_id_fkey(status)')
       .eq('auth_user_id', user.id)
       .maybeSingle();
+
+    // Block deactivated / offboarded employees immediately
+    const isDeactivated = Boolean(
+      employee?.deactivated_at ||
+      employee?.is_deleted ||
+      employee?.employment_status === 'resigned' ||
+      employee?.employment_status === 'terminated'
+    );
+    if (employee && isDeactivated) {
+      const wantsJson = pathname.startsWith('/api') || req.headers.get('accept')?.includes('application/json');
+      if (wantsJson) {
+        return NextResponse.json({ error: 'Account deactivated. Please contact your organization administrator.' }, { status: 403 });
+      }
+      return NextResponse.redirect(new URL('/login?error=account_deactivated', req.url));
+    }
 
     // Block suspended organizations immediately
     const orgStatus = (employee as any)?.organizations?.status;

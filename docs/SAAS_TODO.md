@@ -107,15 +107,15 @@ _P0 = blocks selling to a second customer. P1 = needed before public launch. P2 
 
 ## F. Authentication and User Management (P1)
 
-- [ ] Email and password login with email invites for organizations not using Google
-- [ ] Microsoft 365 login in addition to Google
-- [ ] SAML or OIDC SSO for enterprise (Supabase supports it on paid plans)
-- [ ] Multi-factor authentication option
-- [ ] Per-org settings for allowed login methods and domains
-- [ ] Offboarding: deactivate users, revoke sessions, keep history
-- [ ] Users belonging to more than one organization (consultants, group companies)
+- [x] Email and password login with email invites for organizations not using Google
+- [x] Microsoft 365 login in addition to Google
+- [x] SAML or OIDC SSO for enterprise (Supabase supports it on paid plans)
+- [x] Multi-factor authentication option
+- [x] Per-org settings for allowed login methods and domains
+- [x] Offboarding: deactivate users, revoke sessions, keep history
+- [x] Users belonging to more than one organization (consultants, group companies)
 - [ ] Optional custom roles and permissions beyond employee, lead, manager, HR, super admin
-- [ ] Session and password policies (length, expiry, lockout)
+- [x] Session and password policies (length, expiry, lockout)
 
 ---
 

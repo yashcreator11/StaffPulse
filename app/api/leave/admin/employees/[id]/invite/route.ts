@@ -35,6 +35,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     .from('employees')
     .select('id, email, full_name, auth_user_id')
     .eq('id', id)
+    .eq('org_id', requester.org_id)
     .maybeSingle();
 
   if (fetchError) {
@@ -70,7 +71,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const { error: linkError } = await service
     .from('employees')
     .update({ auth_user_id: invite.user.id, updated_at: new Date().toISOString() })
-    .eq('id', id);
+    .eq('id', id)
+    .eq('org_id', requester.org_id);
 
   if (linkError) {
     return NextResponse.json(
