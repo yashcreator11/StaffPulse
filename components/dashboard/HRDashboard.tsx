@@ -475,100 +475,108 @@ export default function HRDashboard() {
     let lastMonthKey = '';
     const MONTH_NAMES = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-    for (const pf of batch) {
-      const mapping = await getMapping(pf.officeCode);
-      if (!mapping) continue;
-      let { records } = await parseCSVWithMapping(pf.file, mapping, pf.officeCode, thresholds.graceMinutes, thresholds.shortDayMinutes);
-      if (records.length === 0) {
-        // A non-empty CSV that parsed to zero rows almost always means the
-        // saved column mapping no longer matches this file's headers (or
-        // every row is missing an employee code / date). Surface this
-        // loudly instead of silently reporting "0 new, 0 updated" as if
-        // nothing was wrong.
-        results.push(`${pf.officeCode}: 0 rows parsed — check column mapping in Settings, the file's columns may not match what's expected.`);
-        continue;
-      }
-
-      // 'new_only': filter out records whose date falls inside the already-stored range
-      if (mode === 'new_only' && existingRange) {
-        records = records.filter(r => r.date < existingRange.minDate || r.date > existingRange.maxDate);
+    try {
+      for (const pf of batch) {
+        const mapping = await getMapping(pf.officeCode);
+        if (!mapping) continue;
+        let { records } = await parseCSVWithMapping(pf.file, mapping, pf.officeCode, thresholds.graceMinutes, thresholds.shortDayMinutes);
         if (records.length === 0) {
-          results.push(`${pf.officeCode}: all dates already exist — nothing new to import.`);
+          // A non-empty CSV that parsed to zero rows almost always means the
+          // saved column mapping no longer matches this file's headers (or
+          // every row is missing an employee code / date). Surface this
+          // loudly instead of silently reporting "0 new, 0 updated" as if
+          // nothing was wrong.
+          results.push(`${pf.officeCode}: 0 rows parsed — check column mapping in Settings, the file's columns may not match what's expected.`);
           continue;
         }
-      }
 
-      // ── Group records by YYYY_MM so each month gets its own uploaded_months entry ──
-      // For old-style filenames (month/year from filename) we still respect those;
-      // for free-named CSVs we derive YYYY and MM from each record's actual date.
-      const monthGroups = new Map<string, { records: typeof records; year: string; month: string }>();
-      for (const r of records) {
-        const [y, mm] = r.date.split('-');
-        const key = `${y}_${mm}_${pf.officeCode}`;
-        if (!monthGroups.has(key)) monthGroups.set(key, { records: [], year: y, month: mm });
-        monthGroups.get(key)!.records.push(r);
-      }
-
-      for (const [monthKey, { records: monthRecords, year, month }] of monthGroups) {
-        const monthLabel = `${pf.officeCode} \u2014 ${MONTH_NAMES[parseInt(month, 10)]} ${year}`;
-        // NOTE: uploaded_months row must exist BEFORE attendance_records rows,
-        // since attendance_records.month_key has a foreign key referencing
-        // uploaded_months.key. Creating it first avoids a 409/23503 FK violation.
-        await addUploadedMonth({ key: monthKey, label: monthLabel, officeCode: pf.officeCode, month, year });
-        const { added, updated, employeesCreated, employeesSyncError } = await saveRecords(monthKey, monthRecords);
-
-        // Reconcile newly uploaded biometric attendance against already-approved leave.
-        try {
-          const dates = monthRecords.map(r => r.date).filter(Boolean).sort();
-          if (dates.length > 0) {
-            const reconcileResponse = await fetch('/api/leave/attendance/reconcile', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ startDate: dates[0], endDate: dates[dates.length - 1] }),
-            });
-            if (!reconcileResponse.ok) {
-              const body = await reconcileResponse.json().catch(() => ({}));
-              console.warn('Leave/attendance reconciliation failed:', body.error ?? reconcileResponse.statusText);
-            }
+        // 'new_only': filter out records whose date falls inside the already-stored range
+        if (mode === 'new_only' && existingRange) {
+          records = records.filter(r => r.date < existingRange.minDate || r.date > existingRange.maxDate);
+          if (records.length === 0) {
+            results.push(`${pf.officeCode}: all dates already exist — nothing new to import.`);
+            continue;
           }
-        } catch (error) {
-          console.warn('Leave/attendance reconciliation request failed:', error);
         }
 
-        lastMonthKey = monthKey;
-        let summary = `${pf.officeCode} ${MONTH_NAMES[parseInt(month, 10)]} ${year} (${added} new, ${updated} updated)`;
-        if (employeesCreated > 0) {
-          summary += ` \u2014 ${employeesCreated} new employee${employeesCreated === 1 ? '' : 's'} onboarded`;
+        // ── Group records by YYYY_MM so each month gets its own uploaded_months entry ──
+        // For old-style filenames (month/year from filename) we still respect those;
+        // for free-named CSVs we derive YYYY and MM from each record's actual date.
+        const monthGroups = new Map<string, { records: typeof records; year: string; month: string }>();
+        for (const r of records) {
+          const [y, mm] = r.date.split('-');
+          const key = `${y}_${mm}_${pf.officeCode}`;
+          if (!monthGroups.has(key)) monthGroups.set(key, { records: [], year: y, month: mm });
+          monthGroups.get(key)!.records.push(r);
         }
-        if (employeesSyncError) {
-          summary += ` \u2014 WARNING: employee sync failed (${employeesSyncError})`;
+
+        for (const [monthKey, { records: monthRecords, year, month }] of monthGroups) {
+          const monthLabel = `${pf.officeCode} \u2014 ${MONTH_NAMES[parseInt(month, 10)]} ${year}`;
+          // NOTE: uploaded_months row must exist BEFORE attendance_records rows,
+          // since attendance_records.month_key has a foreign key referencing
+          // uploaded_months.key. Creating it first avoids a 409/23503 FK violation.
+          await addUploadedMonth({ key: monthKey, label: monthLabel, officeCode: pf.officeCode, month, year });
+          const { added, updated, employeesCreated, employeesSyncError } = await saveRecords(monthKey, monthRecords);
+
+          // Reconcile newly uploaded biometric attendance against already-approved leave.
+          try {
+            const dates = monthRecords.map(r => r.date).filter(Boolean).sort();
+            if (dates.length > 0) {
+              const reconcileResponse = await fetch('/api/leave/attendance/reconcile', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ startDate: dates[0], endDate: dates[dates.length - 1] }),
+              });
+              if (!reconcileResponse.ok) {
+                const body = await reconcileResponse.json().catch(() => ({}));
+                console.warn('Leave/attendance reconciliation failed:', body.error ?? reconcileResponse.statusText);
+              }
+            }
+          } catch (error) {
+            console.warn('Leave/attendance reconciliation request failed:', error);
+          }
+
+          lastMonthKey = monthKey;
+          let summary = `${pf.officeCode} ${MONTH_NAMES[parseInt(month, 10)]} ${year} (${added} new, ${updated} updated)`;
+          if (employeesCreated > 0) {
+            summary += ` \u2014 ${employeesCreated} new employee${employeesCreated === 1 ? '' : 's'} onboarded`;
+          }
+          if (employeesSyncError) {
+            summary += ` \u2014 WARNING: employee sync failed (${employeesSyncError})`;
+          }
+          results.push(summary);
         }
-        results.push(summary);
       }
-    }
 
-    const months = await getUploadedMonths();
-    setUploadedMonths(months);
-    if (lastMonthKey) {
-      setAllRecords(await getRecords(lastMonthKey));
-      setSelectedMonthKey(lastMonthKey);
-      syncURL(lastMonthKey, 'ALL', []);
-    }
-    setSelectedOffice('ALL');
-    setSelectedDepts([]);
-    setTableFilter('all');
-    // Reset date range so newly imported dates become selectable immediately.
-    setDateFrom(null);
-    setDateTo(null);
-    setDeptDrillSync(null);
-    setAppState('dashboard');
-    setPendingBatch([]);
+      const months = await getUploadedMonths();
+      setUploadedMonths(months);
+      if (lastMonthKey) {
+        setAllRecords(await getRecords(lastMonthKey));
+        setSelectedMonthKey(lastMonthKey);
+        syncURL(lastMonthKey, 'ALL', []);
+      }
+      setSelectedOffice('ALL');
+      setSelectedDepts([]);
+      setTableFilter('all');
+      // Reset date range so newly imported dates become selectable immediately.
+      setDateFrom(null);
+      setDateTo(null);
+      setDeptDrillSync(null);
+      setAppState('dashboard');
+      setPendingBatch([]);
 
-    const skipNote = skippedFiles.length > 0
-      ? ` ${skippedFiles.length} file skipped: ${skippedFiles.map(s => `'${s.name}' (${s.reason.split('\n')[0]})`).join(', ')}.`
-      : '';
-    showToast('success', `Imported ${batch.length} file${batch.length > 1 ? 's' : ''}: ${results.join(', ')}.${skipNote}`);
-    setSkippedFiles([]);
+      const skipNote = skippedFiles.length > 0
+        ? ` ${skippedFiles.length} file skipped: ${skippedFiles.map(s => `'${s.name}' (${s.reason.split('\n')[0]})`).join(', ')}.`
+        : '';
+      showToast('success', `Imported ${batch.length} file${batch.length > 1 ? 's' : ''}: ${results.join(', ')}.${skipNote}`);
+      setSkippedFiles([]);
+    } catch (err: unknown) {
+      console.error('[importBatch] error during import:', err);
+      const msg = err instanceof Error ? err.message : typeof err === 'object' && err && 'message' in err ? String((err as { message: unknown }).message) : 'An unexpected error occurred during import.';
+      showToast('error', `Import failed: ${msg}`);
+      setAppState(uploadedMonths.length > 0 ? 'dashboard' : 'upload');
+      setPendingBatch([]);
+    }
   }
 
   async function handleMonthChange(key: string) {

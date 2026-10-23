@@ -201,7 +201,7 @@ export async function saveRecords(
     .from('attendance_records')
     .select('employee_code, date, office_code')
     .eq('month_key', monthKey);
-  if (fetchErr) throw fetchErr;
+  if (fetchErr) throw new Error(fetchErr.message || 'Failed to fetch existing attendance records');
 
   const existingSet = new Set(
     (existingRows ?? []).map((r) => `${r.employee_code}__${r.date}__${r.office_code}`)
@@ -220,7 +220,7 @@ export async function saveRecords(
     const { error } = await supabase
       .from('attendance_records')
       .upsert(batch, { onConflict: 'employee_code,date,office_code' });
-    if (error) throw error;
+    if (error) throw new Error(error.message || 'Failed to upsert attendance records');
     if (onProgress) {
       onProgress(Math.min(i + batch.length, rows.length), rows.length);
     }
@@ -398,7 +398,9 @@ export async function addUploadedMonth(month: UploadedMonth): Promise<void> {
       },
       { onConflict: 'key' }
     );
-  if (error) throw error;
+  if (error) {
+    throw new Error(error.message || `Failed to save uploaded month (${error.code || 'unknown'})`);
+  }
 }
 
 // ── Full data backup / restore ────────────────────────────────────────────────
