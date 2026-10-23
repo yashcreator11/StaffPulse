@@ -1,24 +1,48 @@
 import { ColumnMapping } from './types';
+import { detectVendorTemplate, VendorTemplate } from './vendorTemplates';
 
-// Only the string-valued column headers — dateFormat is handled separately
+// Only the string-valued column headers — dateFormat and vendorPreset are handled separately
 // and should NOT be included in the auto-match synonym table.
-type MappableField = Exclude<keyof ColumnMapping, 'dateFormat'>;
+type MappableField = Exclude<keyof ColumnMapping, 'dateFormat' | 'vendorPreset'>;
 
 export const FIELD_SYNONYMS: Record<MappableField, string[]> = {
-  employeeCode: ['empid', 'employeeid', 'empcode', 'staffid', 'id', 'employeecode'],
-  employeeName: ['empname', 'name', 'staffname', 'fullname', 'employeename'],
-  date: ['attendancedate', 'punchdate', 'date'],
-  inTime: ['checkin', 'intime', 'punchin', 'firstin', 'in'],
-  outTime: ['checkout', 'outtime', 'punchout', 'lastout', 'out'],
-  status: ['attendancestatus', 'daystatus', 'status'],
-  lateBy: ['late', 'latemins', 'lateduration', 'lateby'],
-  earlyBy: ['early', 'earlymins', 'earlyduration', 'earlyleaving', 'earlyby'],
-  duration: ['workinghours', 'totalhours', 'hoursworked', 'workdur', 'duration', 'hours'],
-  department: ['dept', 'team', 'division', 'department'],
+  employeeCode: [
+    'empid', 'employeeid', 'empcode', 'staffid', 'id', 'employeecode',
+    'acno', 'enrollno', 'userid', 'personid', 'enno', 'badgenumber'
+  ],
+  employeeName: [
+    'empname', 'name', 'staffname', 'fullname', 'employeename',
+    'username', 'personname'
+  ],
+  date: [
+    'attendancedate', 'punchdate', 'date', 'attdate', 'eventdate'
+  ],
+  inTime: [
+    'checkin', 'intime', 'punchin', 'firstin', 'in', 'clockin', 'checkintime'
+  ],
+  outTime: [
+    'checkout', 'outtime', 'punchout', 'lastout', 'out', 'clockout', 'checkouttime'
+  ],
+  status: [
+    'attendancestatus', 'daystatus', 'status', 'attendancestate', 'attendanceresult', 'attstatus'
+  ],
+  lateBy: [
+    'late', 'latemins', 'lateduration', 'lateby', 'latein', 'latetime'
+  ],
+  earlyBy: [
+    'early', 'earlymins', 'earlyduration', 'earlyleaving', 'earlyby', 'earlyout', 'leaveearlytime'
+  ],
+  duration: [
+    'workinghours', 'totalhours', 'hoursworked', 'workdur', 'duration', 'hours',
+    'workduration', 'workhours', 'worktime', 'actualworktime'
+  ],
+  department: [
+    'dept', 'team', 'division', 'department', 'departmentname', 'deptname'
+  ],
 };
 
 function normalize(s: string): string {
-  return s.toLowerCase().replace(/[\s_\-./]+/g, '').replace(/[^a-z0-9]/g, '');
+  return s.toLowerCase().replace(/[\s_\-./()]+/g, '').replace(/[^a-z0-9]/g, '');
 }
 
 // Simple Levenshtein distance for fallback fuzzy matching
@@ -41,14 +65,22 @@ export interface AutoMatchResult {
   mapping: Partial<ColumnMapping>;
   autoMatched: Set<keyof ColumnMapping>;
   unmatchedHeaders: string[];
+  detectedVendor: VendorTemplate | null;
 }
 
-/** Best-effort auto-match of CSV headers to the 10 standard fields. */
+/** Best-effort auto-match of CSV headers to the standard fields with vendor template detection. */
 export function autoMatchColumns(csvHeaders: string[]): AutoMatchResult {
   const normHeaders = csvHeaders.map((h) => ({ raw: h, norm: normalize(h) }));
   const mapping: Partial<ColumnMapping> = {};
   const autoMatched = new Set<keyof ColumnMapping>();
   const consumed = new Set<string>();
+
+  // Check if headers match a known vendor profile (eSSL, ZKTeco, Matrix, etc.)
+  const detectedVendor = detectVendorTemplate(csvHeaders);
+  if (detectedVendor) {
+    mapping.vendorPreset = detectedVendor.id;
+    mapping.dateFormat = detectedVendor.defaultDateFormat;
+  }
 
   for (const field of Object.keys(FIELD_SYNONYMS) as MappableField[]) {
     const synonyms = FIELD_SYNONYMS[field];
@@ -85,5 +117,5 @@ export function autoMatchColumns(csvHeaders: string[]): AutoMatchResult {
   }
 
   const unmatchedHeaders = csvHeaders.filter((h) => !consumed.has(h));
-  return { mapping, autoMatched, unmatchedHeaders };
+  return { mapping, autoMatched, unmatchedHeaders, detectedVendor };
 }

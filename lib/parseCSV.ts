@@ -34,6 +34,23 @@ function countPunches(punchRecords?: string): number {
   return Math.max(1, Math.ceil(parts.length / 2));
 }
 
+export function calculateDurationFromPunchRecords(punchRecordsRaw?: string): string | null {
+  if (!punchRecordsRaw) return null;
+  const punches = punchRecordsRaw
+    .split(',')
+    .map(p => p.trim())
+    .filter(isPunchTimeValid);
+  if (punches.length < 2) return null;
+  let totalMins = 0;
+  for (let i = 0; i < punches.length - 1; i += 2) {
+    const inM = timeToMinutes(punches[i]);
+    const outM = timeToMinutes(punches[i + 1]);
+    const diff = outM >= inM ? outM - inM : (outM + 1440) - inM;
+    totalMins += diff;
+  }
+  return totalMins > 0 ? minutesToHHMM(totalMins) : null;
+}
+
 // Row dates come straight from the biometric export's CSV column with no
 // guaranteed format. Everything downstream (page.tsx's date-range picker,
 // useDashboardData's `r.date < dateFrom` filtering, various `.sort()` calls,
@@ -128,6 +145,11 @@ function normalizeStatus(
     return 'Missed Punch Out';
   }
 
+  // If punch out exists but punch in doesn't → Missed Punch In
+  if (!hasInPunch && hasOutPunch) {
+    return 'Missed Punch In';
+  }
+
   // If there are punch records → use actual status (never Weekly Off if they punched)
   if (hasInPunch || hasOutPunch || punchCount > 0) {
     return statusStr;
@@ -219,16 +241,22 @@ export function parseCSVWithMapping(
             durationStr = '0:00';
           }
 
-          // Auto-calculate duration from In Time and Out Time if Duration is missing, blank, or 0:00 (ONLY for non-absent rows with punches)
-          if (!isAbsentOrOff && (!durationStr || durationStr === '0:00' || durationStr === '--') && isPunchTimeValid(inTimeStr) && isPunchTimeValid(outTimeStr)) {
-            const inMins = timeToMinutes(inTimeStr);
-            const outMins = timeToMinutes(outTimeStr);
-            const diff = outMins >= inMins ? outMins - inMins : (outMins + 1440) - inMins; // handles night shifts
-            durationStr = minutesToHHMM(diff);
+          // Auto-calculate duration from In Time and Out Time or Punch Records if Duration is missing, blank, or 0:00 (ONLY for non-absent rows with punches)
+          const punchRecordsDuration = calculateDurationFromPunchRecords(punchRecordsRaw);
+          if (!isAbsentOrOff && (!durationStr || durationStr === '0:00' || durationStr === '--')) {
+            if (punchRecordsDuration) {
+              durationStr = punchRecordsDuration;
+            } else if (isPunchTimeValid(inTimeStr) && isPunchTimeValid(outTimeStr)) {
+              const inMins = timeToMinutes(inTimeStr);
+              const outMins = timeToMinutes(outTimeStr);
+              const diff = outMins >= inMins ? outMins - inMins : (outMins + 1440) - inMins; // handles night shifts
+              durationStr = minutesToHHMM(diff);
+            }
           }
 
           // Normalize status based on punch presence:
           // - If punch in exists but no punch out → "Missed Punch Out"
+          // - If punch out exists but no punch in → "Missed Punch In"
           // - If no punches at all → "Absent"
           statusStr = normalizeStatus(statusStr, inTimeStr, outTimeStr, date, punchCount);
 
@@ -254,11 +282,14 @@ export function parseCSVWithMapping(
             extraFields[h] = String(row[h]);
           }
 
+          const rawDept = mapping.department ? row[mapping.department] : undefined;
+          const department = String(rawDept || '').trim() || 'General';
+
           records.push({
             date,
             employeeCode: empCode,
             employeeName: String(row[mapping.employeeName] || '').trim(),
-            department: String(row[mapping.department] || 'Unknown').trim() || 'Unknown',
+            department,
             inTime: inTimeStr,
             outTime: outTimeStr,
             status: statusStr,

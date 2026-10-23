@@ -102,7 +102,8 @@ export interface ColumnMapping {
   lateBy: string;
   earlyBy: string;
   duration: string;
-  department: string;
+  department?: string; // Optional — for organizations without departments
+  vendorPreset?: string; // Hardware preset, e.g. 'zkteco' | 'essl' | 'matrix' | 'realtime' | 'hikvision'
   // Date format of this office's CSV export — stored so every re-upload
   // parses dates correctly without asking the user again.
   // 'DMY' = DD/MM/YYYY (Indian biometric default)
@@ -255,4 +256,6 @@ export interface UploadedMonth {
   officeCode: string;
   month: string;
   year: string;
+  createdAt?: string;
+  updatedAt?: string;
 }

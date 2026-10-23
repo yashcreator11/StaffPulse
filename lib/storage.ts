@@ -189,7 +189,8 @@ function fromDbRow(row: Record<string, unknown>): AttendanceRecord {
 // for that compound key; unrelated existing rows are untouched.
 export async function saveRecords(
   monthKey: string,
-  records: AttendanceRecord[]
+  records: AttendanceRecord[],
+  onProgress?: (saved: number, total: number) => void
 ): Promise<{ added: number; updated: number; employeesCreated: number; employeesSyncError?: string }> {
   if (records.length === 0) return { added: 0, updated: 0, employeesCreated: 0 };
   const supabase = createClient();
@@ -220,6 +221,9 @@ export async function saveRecords(
       .from('attendance_records')
       .upsert(batch, { onConflict: 'employee_code,date,office_code' });
     if (error) throw error;
+    if (onProgress) {
+      onProgress(Math.min(i + batch.length, rows.length), rows.length);
+    }
   }
 
   // Auto-onboard any employee_code from this CSV that doesn't already exist
@@ -358,7 +362,7 @@ export async function getUploadedMonths(): Promise<UploadedMonth[]> {
   const supabase = createClient();
   const { data, error } = await supabase
     .from('uploaded_months')
-    .select('key, label, office_code, month, year')
+    .select('key, label, office_code, month, year, created_at, updated_at')
     .order('created_at', { ascending: true });
   if (error) {
     console.error('getUploadedMonths failed:', error);
@@ -370,6 +374,8 @@ export async function getUploadedMonths(): Promise<UploadedMonth[]> {
     officeCode: m.office_code as string,
     month: m.month as string,
     year: m.year as string,
+    createdAt: (m.created_at as string) ?? undefined,
+    updatedAt: (m.updated_at as string) ?? (m.created_at as string) ?? undefined,
   }));
 }
 
@@ -378,10 +384,18 @@ export async function getUploadedMonths(): Promise<UploadedMonth[]> {
 // so inserting attendance rows first would throw a 23503 FK violation.
 export async function addUploadedMonth(month: UploadedMonth): Promise<void> {
   const supabase = createClient();
+  const now = new Date().toISOString();
   const { error } = await supabase
     .from('uploaded_months')
     .upsert(
-      { key: month.key, label: month.label, office_code: month.officeCode, month: month.month, year: month.year },
+      {
+        key: month.key,
+        label: month.label,
+        office_code: month.officeCode,
+        month: month.month,
+        year: month.year,
+        updated_at: now,
+      },
       { onConflict: 'key' }
     );
   if (error) throw error;

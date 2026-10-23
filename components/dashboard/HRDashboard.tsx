@@ -128,6 +128,29 @@ export default function HRDashboard() {
   // DeptProductivityChart follows
   const [deptDrillSync, setDeptDrillSync] = useState<string | null>(null);
 
+  const latestDataUpdated = useMemo(() => {
+    if (!uploadedMonths || uploadedMonths.length === 0) return null;
+    const sorted = [...uploadedMonths].sort((a, b) => {
+      const tA = a.updatedAt || a.createdAt || '';
+      const tB = b.updatedAt || b.createdAt || '';
+      return tB.localeCompare(tA);
+    });
+    const mostRecent = sorted[0]?.updatedAt || sorted[0]?.createdAt;
+    if (!mostRecent) return null;
+    try {
+      const d = new Date(mostRecent);
+      return d.toLocaleString('en-IN', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    } catch {
+      return null;
+    }
+  }, [uploadedMonths]);
+
   useEffect(() => {
     getThresholds().then(setThresholds);
   }, []);
@@ -796,6 +819,9 @@ export default function HRDashboard() {
                   </h1>
                   <p className="text-xs text-[var(--text-muted)] mt-0.5">
                     biometric analytics &amp; employee attendance tracking · <span className="font-semibold text-[var(--text-primary)]">{filteredRecords.length.toLocaleString()}</span> records
+                    {latestDataUpdated && (
+                      <> · <span className="text-blue-500 dark:text-blue-400 font-medium">Data updated: {latestDataUpdated}</span></>
+                    )}
                   </p>
                 </div>
 

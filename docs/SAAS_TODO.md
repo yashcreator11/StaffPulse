@@ -91,16 +91,16 @@ _P0 = blocks selling to a second customer. P1 = needed before public launch. P2 
 
 ## E. Attendance Data Ingestion (P1)
 
-- [ ] Store saved column mappings and device format templates per organization
-- [ ] Vendor template library (ZKTeco, eSSL, Matrix, Realtime, Hikvision and others common in your market)
-- [ ] Import validation and error reports: duplicate punches, unknown employees, bad dates, overlapping uploads, with a preview before saving
-- [ ] Idempotent re-uploads; correct a previously uploaded month
-- [ ] Large files: chunked parsing, progress display, background processing instead of the browser tab
-- [ ] Shifts that cross midnight, multiple punches per day, missed punches
-- [ ] Matching rules between device IDs and employee codes, with an unmatched-IDs screen
-- [ ] Make the department/group column optional in the mapping step; support group and hierarchy mapping
-- [ ] Track and display "data last updated" time for day view
-- [ ] ✔ Verify where data really lives (`lib/storage.ts`, `employeeStore.ts`); confirm no browser-only paths bypass the database
+- [x] Store saved column mappings and device format templates per organization
+- [x] Vendor template library (ZKTeco, eSSL, Matrix, Realtime, Hikvision and others common in your market)
+- [x] Import validation and error reports: duplicate punches, unknown employees, bad dates, overlapping uploads, with a preview before saving
+- [x] Idempotent re-uploads; correct a previously uploaded month
+- [x] Large files: chunked parsing, progress display, background processing instead of the browser tab
+- [x] Shifts that cross midnight, multiple punches per day, missed punches
+- [x] Matching rules between device IDs and employee codes, with an unmatched-IDs screen
+- [x] Make the department/group column optional in the mapping step; support group and hierarchy mapping
+- [x] Track and display "data last updated" time for day view
+- [x] ✔ Verify where data really lives (`lib/storage.ts`, `employeeStore.ts`); confirm no browser-only paths bypass the database
 - [ ] API or small sync agent so devices push punches automatically (P2)
 
 ---

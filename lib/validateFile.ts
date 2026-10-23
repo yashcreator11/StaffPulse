@@ -52,7 +52,15 @@ export const REQUIRED_STANDARD_FIELDS = [
   'lateBy',
   'earlyBy',
   'duration',
+] as const;
+
+export const OPTIONAL_STANDARD_FIELDS = [
   'department',
+] as const;
+
+export const ALL_STANDARD_FIELDS = [
+  ...REQUIRED_STANDARD_FIELDS,
+  ...OPTIONAL_STANDARD_FIELDS,
 ] as const;
 
 export const FIELD_LABELS: Record<string, string> = {
@@ -65,5 +73,5 @@ export const FIELD_LABELS: Record<string, string> = {
   lateBy: 'Late By',
   earlyBy: 'Early By',
   duration: 'Duration',
-  department: 'Department',
+  department: 'Department (Optional)',
 };
