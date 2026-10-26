@@ -132,7 +132,6 @@ export function AttendanceHeatmap({
 
   useEffect(() => {
     setViewMode(isMultiMonth ? 'month' : 'day');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isMultiMonth]);
 
   const monthlyStats = useMemo(() => {

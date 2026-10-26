@@ -1,6 +1,7 @@
 'use client';
 import { useState, useRef, useMemo, useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import Link from 'next/link';
 import { Download, FileSpreadsheet, FileText, FileIcon, ChevronDown, Loader2, X, Calendar, Building2, Users, Coins, ExternalLink } from 'lucide-react';
 import { UploadedMonth, Thresholds, Holiday, LeaveRecord, AttendanceRecord } from '@/lib/types';
 import { getRecords } from '@/lib/storage';
@@ -332,7 +333,7 @@ export default function ExportPanel({ uploadedMonths, thresholds, restrictToEmpl
               </div>
 
               {/* Payroll Payable Days Direct Shortcut */}
-              <a
+              <Link
                 href="/leave/admin/reports/payable-days"
                 className="flex items-center justify-between p-3 rounded-xl bg-orange-500/10 border border-orange-500/25 text-orange-600 dark:text-orange-400 hover:bg-orange-500/15 transition-all text-xs group"
               >
@@ -343,7 +344,7 @@ export default function ExportPanel({ uploadedMonths, thresholds, restrictToEmpl
                 <span className="text-[11px] font-bold underline flex items-center gap-1 shrink-0">
                   Open Report <ExternalLink className="w-3 h-3" />
                 </span>
-              </a>
+              </Link>
             </div>
 
             {/* Download actions */}

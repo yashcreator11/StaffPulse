@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { CheckCircle, Calendar, X as XIcon, Info, Sparkles, Lock, Home } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
@@ -181,7 +182,6 @@ export default function HRDashboard() {
         showToast('error', result.error ?? 'Could not load the employee directory.');
       }
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -252,12 +252,13 @@ export default function HRDashboard() {
   // date filter is active) or deferred in the background after the selected
   // month's records are loaded and rendered.
   const needsAllMonths = Boolean(dateFrom || dateTo);
+  const hasLoadedRecords = allRecords.length > 0;
 
   useEffect(() => {
     if (uploadedMonths.length === 0) { setAllUploadedRecords([]); return; }
     // Only load all uploaded months on demand (custom date filter),
     // or defer to background after the selected month's records are loaded.
-    if (!needsAllMonths && allRecords.length === 0) return;
+    if (!needsAllMonths && !hasLoadedRecords) return;
 
     let cancelled = false;
     const timer = setTimeout(() => {
@@ -293,7 +294,7 @@ export default function HRDashboard() {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [uploadedMonths, needsAllMonths, allRecords.length > 0]);
+  }, [uploadedMonths, needsAllMonths, hasLoadedRecords]);
 
   useEffect(() => {
     function handler(e: Event) {
@@ -841,12 +842,12 @@ export default function HRDashboard() {
                 <Home className="w-3.5 h-3.5" />
                 <span>Exit Demo &amp; Return Home</span>
               </button>
-              <a
+              <Link
                 href="/signup"
                 className="px-4 py-2 rounded-xl bg-[var(--accent)] text-white font-bold text-xs hover:opacity-90 transition-opacity flex-shrink-0 shadow-md"
               >
                 Upgrade to Live Plan →
-              </a>
+              </Link>
             </div>
           </div>
         )}
@@ -1449,12 +1450,12 @@ export default function HRDashboard() {
                           Trial accounts are restricted to pre-loaded sample data. Upgrade to a live subscription to upload your company&apos;s biometric punch files.
                         </p>
                       </div>
-                      <a
+                      <Link
                         href="/signup"
                         className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[var(--accent)] text-white text-xs font-bold hover:opacity-90 shadow-md"
                       >
                         Upgrade to Live Plan →
-                      </a>
+                      </Link>
                     </div>
                   ) : (
                     <UploadZone onFiles={handleFiles} />
@@ -1612,12 +1613,12 @@ export default function HRDashboard() {
               >
                 Close
               </button>
-              <a
+              <Link
                 href="/signup"
                 className="px-4 py-2 rounded-xl text-xs font-bold bg-[var(--accent)] text-white hover:opacity-90 shadow-md"
               >
                 Upgrade to Live Plan →
-              </a>
+              </Link>
             </div>
           </div>
         </div>

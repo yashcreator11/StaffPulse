@@ -1,5 +1,5 @@
 import { cache } from 'react';
-import { createLeaveClient } from '@/lib/leaveSupabase/server';
+import { createLeaveClient } from './server';
 
 export type EmployeeRole = 'employee' | 'lead' | 'manager' | 'hr' | 'hr_super_admin';
 
@@ -82,7 +82,14 @@ export const getCurrentEmployee = cache(async function getCurrentEmployee(): Pro
 
   if (error || !employee) return null;
 
-  return employee as CurrentEmployee;
+  const org = Array.isArray((employee as any).organizations)
+    ? (employee as any).organizations[0]
+    : (employee as any).organizations;
+
+  return {
+    ...employee,
+    organizations: org || null,
+  } as unknown as CurrentEmployee;
 });
 
 // Where each role lands right after login / when they hit a route their

@@ -1,5 +1,5 @@
 'use client';
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { AttendanceRecord, EmployeeSummary, LeaveRecord, Holiday, EffectiveStatus } from '@/lib/types';
 import { computeEmployeeKPIs, ComparisonKPIs, buildLeaveMap, getEffectiveStatus, leaveKey } from '@/lib/useDashboardData';
@@ -477,15 +477,15 @@ export default function EmployeeComparisonPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [history]);
 
-  function kpisForHistMonth(m: typeof history[number] | undefined): ComparisonKPIs | null {
+  const kpisForHistMonth = useCallback((m: typeof history[number] | undefined): ComparisonKPIs | null => {
     if (!m) return null;
     const extras = monthExtras[m.monthKey];
     if (!extras) return null;
     return computeEmployeeKPIs(m.records, extras.leaveMap, extras.holidays, graceMinutes, shiftStartMinutes, shiftEndMinutes);
-  }
+  }, [monthExtras, graceMinutes, shiftStartMinutes, shiftEndMinutes]);
 
-  const monthAKPIs = useMemo(() => kpisForHistMonth(monthA), [monthA, monthExtras, graceMinutes, shiftStartMinutes, shiftEndMinutes]);
-  const monthBKPIs = useMemo(() => kpisForHistMonth(monthB), [monthB, monthExtras, graceMinutes, shiftStartMinutes, shiftEndMinutes]);
+  const monthAKPIs = useMemo(() => kpisForHistMonth(monthA), [monthA, kpisForHistMonth]);
+  const monthBKPIs = useMemo(() => kpisForHistMonth(monthB), [monthB, kpisForHistMonth]);
 
   // Trend across every uploaded month for this employee, so a manager can see
   // trajectory (steady slide vs. one-off dip) instead of just a two-point diff.

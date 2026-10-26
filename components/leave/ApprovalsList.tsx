@@ -177,28 +177,24 @@ export default function ApprovalsList({
   const showReg = kind === 'all' || kind === 'regularisation';
   const showMissedPunch = kind === 'all' || kind === 'missed_punch';
 
-  const visibleLeave = showLeave ? filtered : [];
-  const visibleWfh = showWfh ? filteredWfh : [];
-  const visibleReg = showReg ? filteredRegularisations : [];
-  const visibleMissedPunch = showMissedPunch ? filteredMissedPunches : [];
-  const nothingToShow =
-    visibleLeave.length === 0 &&
-    visibleWfh.length === 0 &&
-    visibleReg.length === 0 &&
-    visibleMissedPunch.length === 0;
+  const combined: CombinedItem[] = useMemo(() => {
+    const list: CombinedItem[] = [];
+    if (showLeave) {
+      for (const data of filtered) list.push({ kind: 'leave' as const, id: data.id, data });
+    }
+    if (showWfh) {
+      for (const data of filteredWfh) list.push({ kind: 'wfh' as const, id: data.id, data });
+    }
+    if (showReg) {
+      for (const data of filteredRegularisations) list.push({ kind: 'regularisation' as const, id: data.id, data });
+    }
+    if (showMissedPunch) {
+      for (const data of filteredMissedPunches) list.push({ kind: 'missed_punch' as const, id: data.id, data });
+    }
+    return list;
+  }, [showLeave, showWfh, showReg, showMissedPunch, filtered, filteredWfh, filteredRegularisations, filteredMissedPunches]);
 
-  // Single combined, ordered list (leave, then WFH, then regularisation, then missed punch)
-  // so the grid + pagination below only has to deal with one array,
-  // regardless of which tab is active.
-  const combined: CombinedItem[] = useMemo(
-    () => [
-      ...visibleLeave.map((data) => ({ kind: 'leave' as const, id: data.id, data })),
-      ...visibleWfh.map((data) => ({ kind: 'wfh' as const, id: data.id, data })),
-      ...visibleReg.map((data) => ({ kind: 'regularisation' as const, id: data.id, data })),
-      ...visibleMissedPunch.map((data) => ({ kind: 'missed_punch' as const, id: data.id, data })),
-    ],
-    [visibleLeave, visibleWfh, visibleReg, visibleMissedPunch]
-  );
+  const nothingToShow = combined.length === 0;
 
   const totalPages = Math.max(1, Math.ceil(combined.length / PAGE_SIZE));
 

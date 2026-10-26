@@ -1,12 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentEmployee } from '@/lib/leaveSupabase/getCurrentEmployee';
 import { enqueueJob, listRecentJobs, BackgroundJobType } from '@/lib/jobs/jobQueue';
+import { processPendingBackgroundJobs } from '@/lib/jobs/jobWorker';
 
 // GET /api/jobs — List recent jobs for requester's organization
 export async function GET() {
   const requester = await getCurrentEmployee();
   if (!requester) {
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  }
+
+  if (requester.role !== 'hr' && requester.role !== 'hr_super_admin') {
+    return NextResponse.json({ error: 'Unauthorized: HR Admin privileges required' }, { status: 403 });
   }
 
   const orgId = requester.org_id || '00000000-0000-0000-0000-000000000001';
@@ -26,6 +31,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
   }
 
+  if (requester.role !== 'hr' && requester.role !== 'hr_super_admin') {
+    return NextResponse.json({ error: 'Unauthorized: HR Admin privileges required' }, { status: 403 });
+  }
+
   const orgId = requester.org_id || '00000000-0000-0000-0000-000000000001';
 
   try {
@@ -37,6 +46,9 @@ export async function POST(req: NextRequest) {
     }
 
     const job = await enqueueJob(orgId, jobType as BackgroundJobType, payload || {});
+    queueMicrotask(() => {
+      processPendingBackgroundJobs(5, orgId).catch(() => {});
+    });
     return NextResponse.json({ job });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Failed to enqueue job';

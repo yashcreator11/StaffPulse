@@ -87,13 +87,13 @@ export default function LockedFeatureGate({
             <span>{backLabel}</span>
           </Link>
 
-          <a
+          <Link
             href="/api/auth/signout"
             className="inline-flex items-center justify-center gap-1.5 text-[11px] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:underline transition-colors pt-1"
           >
             <Home className="w-3 h-3" />
             <span>Exit Demo &amp; Return to Homepage</span>
-          </a>
+          </Link>
         </div>
       </div>
     </div>

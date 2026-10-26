@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import {
   Cpu,
   Plus,
@@ -229,12 +230,12 @@ export default function BiometricDevicesPage() {
               </p>
             </div>
           </div>
-          <a
+          <Link
             href="/signup"
             className="px-4 py-2 rounded-xl bg-accent text-white font-bold text-xs hover:opacity-90 transition-opacity flex-shrink-0 shadow-md"
           >
             Upgrade to Live Plan →
-          </a>
+          </Link>
         </div>
       )}
 
@@ -876,12 +877,12 @@ export default function BiometricDevicesPage() {
               >
                 Close
               </button>
-              <a
+              <Link
                 href="/signup"
                 className="px-4 py-2 rounded-xl text-xs font-bold bg-accent text-white hover:opacity-90 shadow-md"
               >
                 Upgrade to Live Plan →
-              </a>
+              </Link>
             </div>
           </div>
         </div>

@@ -1327,6 +1327,8 @@ function MasterDashboardContent() {
             )}
           </div>
         </div>
+      )}
+
       {/* ── Pricing & Coupons Management Tab ─────────────────────────── */}
       {activeTab === 'pricing' && (
         <div className="space-y-8 animate-in fade-in duration-200">

@@ -648,7 +648,7 @@ export function useDashboardData(
 
       return emp;
     });
-  }, [filtered, holidays, grace, shiftStart, shiftEnd, thresholds.frequentPunchCount, thresholds.attendanceRateGreen, thresholds.attendanceRateAmber, leaveMap]);
+  }, [filtered, holidays, grace, shiftStart, shiftEnd, thresholds.frequentPunchCount, thresholds.avgHoursPctAmber, thresholds.avgHoursPctGreen, leaveMap]);
 
   const dailyTrend: DailyTrend[] = useMemo(() => {
     const byDate = new Map<string, {
@@ -725,7 +725,7 @@ export function useDashboardData(
         };
       })
       .sort((a, b) => a.rate - b.rate);
-  }, [filtered, holidays, grace, shiftStart, shiftEnd, thresholds.attendanceRateGreen, thresholds.attendanceRateAmber, leaveMap]);
+  }, [filtered, holidays, shiftStart, shiftEnd, thresholds.attendanceRateGreen, thresholds.attendanceRateAmber, leaveMap]);
 
   const officeAttendance: OfficeAttendance[] = useMemo(() => {
     const source = allOfficeRecords.length > 0 ? allOfficeRecords : records;
