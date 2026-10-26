@@ -8,6 +8,8 @@ import {
 } from './getCurrentEmployee';
 import { createLeaveClient } from './server';
 import { getPendingApprovalsCount } from './getPendingApprovalsCount';
+import { isPaymentPending } from '@/lib/billing/billingGuard';
+import { canAccessFeature, normalizePlanTier, GatedFeature } from '@/lib/billing/planGating';
 
 export interface LeaveAccessResult {
   employee: CurrentEmployee;
@@ -28,6 +30,11 @@ export interface RequireLeaveAccessOptions {
    * personal-attendance pages hr_super_admin has no personal data for.
    */
   redirectHrSuperAdminTo?: string;
+  /**
+   * If set, validates that the employee's organization subscription tier
+   * includes this feature. Redirects to /leave/locked if not entitled.
+   */
+  requiredFeature?: GatedFeature;
 }
 
 // Bug fix (drift risk): this is the exact same precedence chain that used
@@ -66,6 +73,11 @@ export async function requireLeaveAccess(
     redirect(pendingRedirect || '/leave/login');
   }
 
+  // Payment Gate: if the organization is pending payment, intercept and redirect to /checkout
+  if (isPaymentPending(employee)) {
+    redirect('/checkout');
+  }
+
   if (employee.must_change_password) {
     redirect('/leave/change-password');
   }
@@ -83,6 +95,14 @@ export async function requireLeaveAccess(
 
   if (options.allowedRoles && !options.allowedRoles.includes(employee.role)) {
     redirect(homeRouteForRole(employee.role));
+  }
+
+  // Plan Entitlement Gate: intercept if the feature is not included in the plan tier
+  if (options.requiredFeature) {
+    const userPlan = normalizePlanTier(employee.organizations?.plan);
+    if (!canAccessFeature(userPlan, options.requiredFeature)) {
+      redirect(`/leave/locked?feature=${options.requiredFeature}`);
+    }
   }
 
   // Pending-approvals badge shown on the shell's "Approvals" tab — computed

@@ -10,6 +10,7 @@ import {
   ArrowLeft,
   Lock,
   Cpu,
+  CreditCard,
 } from 'lucide-react';
 
 export default function MasterLayout({
@@ -63,6 +64,13 @@ export default function MasterLayout({
               >
                 <FileText className="w-3.5 h-3.5 text-blue-500" />
                 <span>Audit Ledger</span>
+              </Link>
+              <Link
+                href="/master?tab=pricing"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)] transition-colors"
+              >
+                <CreditCard className="w-3.5 h-3.5 text-purple-500" />
+                <span>Pricing &amp; Coupons</span>
               </Link>
               <Link
                 href="/master?tab=system"

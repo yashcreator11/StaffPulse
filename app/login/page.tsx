@@ -2,7 +2,8 @@
 import { useState, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Fingerprint, ArrowLeft } from 'lucide-react';
+import { Fingerprint, ArrowLeft, Sparkles, Check } from 'lucide-react';
+import { useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
 
 // The ONE login page for the whole app (single-login pivot — see
@@ -64,6 +65,55 @@ function LoginForm() {
   const [googleLoading, setGoogleLoading] = useState(false);
   const [microsoftLoading, setMicrosoftLoading] = useState(false);
   const [showPasswordForm, setShowPasswordForm] = useState(false);
+
+  useEffect(() => {
+    const demo = searchParams.get('demo');
+    if (demo) {
+      setShowPasswordForm(true);
+      if (demo === 'starter') {
+        setEmail('demo.starter@staffpulse.io');
+        setPassword('Password@123');
+      } else if (demo === 'enterprise') {
+        setEmail('demo.enterprise@staffpulse.io');
+        setPassword('Password@123');
+      } else {
+        setEmail('demo.pro@staffpulse.io');
+        setPassword('Password@123');
+      }
+    }
+  }, [searchParams]);
+
+  async function handleQuickDemoSignIn(plan: 'starter' | 'pro' | 'enterprise') {
+    setError(null);
+    setLoading(true);
+    setShowPasswordForm(true);
+
+    const demoEmail =
+      plan === 'starter'
+        ? 'demo.starter@staffpulse.io'
+        : plan === 'enterprise'
+        ? 'demo.enterprise@staffpulse.io'
+        : 'demo.pro@staffpulse.io';
+
+    setEmail(demoEmail);
+    setPassword('Password@123');
+
+    const supabase = createClient();
+    const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+      email: demoEmail,
+      password: 'Password@123',
+    });
+
+    if (signInError || !signInData.user) {
+      setLoading(false);
+      setError(signInError?.message || 'Failed to authenticate demo user');
+      return;
+    }
+
+    setLoading(false);
+    router.replace('/');
+    router.refresh();
+  }
 
   async function handleGoogleSignIn() {
     setError(null);
@@ -293,6 +343,49 @@ function LoginForm() {
                 </p>
               </form>
             )}
+
+            {/* ── 1-Click Instant Free Trial Sandboxes Strip ──────────────── */}
+            <div className="pt-2 border-t border-[var(--border)] space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>Explore Sandbox (No Registration)</span>
+                </span>
+                <span className="text-[10px] text-[var(--text-muted)]">Live dummy data</span>
+              </div>
+              <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">
+                Test-drive the dashboard with 50 pre-loaded employees before purchasing:
+              </p>
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleQuickDemoSignIn('starter')}
+                  disabled={loading}
+                  className="px-2.5 py-2 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]/60 hover:bg-[var(--bg-elevated)] text-xs font-semibold text-[var(--text-primary)] flex flex-col items-center justify-center gap-0.5 transition-all text-center shadow-sm"
+                >
+                  <span className="font-bold">🚀 Starter</span>
+                  <span className="text-[9px] text-[var(--text-muted)]">Punch Log</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleQuickDemoSignIn('pro')}
+                  disabled={loading}
+                  className="px-2.5 py-2 rounded-xl border border-orange-500/30 bg-orange-500/10 hover:bg-orange-500/15 text-xs font-semibold text-orange-600 dark:text-orange-400 flex flex-col items-center justify-center gap-0.5 transition-all text-center shadow-sm"
+                >
+                  <span className="font-bold">⭐ Pro</span>
+                  <span className="text-[9px] text-[var(--text-muted)]">Statutory</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleQuickDemoSignIn('enterprise')}
+                  disabled={loading}
+                  className="px-2.5 py-2 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]/60 hover:bg-[var(--bg-elevated)] text-xs font-semibold text-[var(--text-primary)] flex flex-col items-center justify-center gap-0.5 transition-all text-center shadow-sm"
+                >
+                  <span className="font-bold">🏢 Enterprise</span>
+                  <span className="text-[9px] text-[var(--text-muted)]">Multi-Office</span>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>

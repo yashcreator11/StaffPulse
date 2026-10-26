@@ -1,5 +1,6 @@
 import { requireLeaveAccess } from '@/lib/leaveSupabase/requireLeaveAccess';
 import LeaveShell from '@/components/leave/LeaveShell';
+import { isDemoEmail } from '@/lib/isDemoSandbox';
 
 // Protects app/leave/approvals/** — the pending-approval queue. Manager
 // is the primary audience; HR / hr_super_admin can also reach it since
@@ -20,10 +21,18 @@ export default async function LeaveApprovalsLayout({
 }) {
   const { employee, pendingApprovalsCount } = await requireLeaveAccess({
     allowedRoles: ['manager', 'lead', 'hr', 'hr_super_admin'],
+    requiredFeature: 'manager_approvals',
   });
 
   return (
-    <LeaveShell employeeName={employee.full_name} role={employee.role} pendingApprovalsCount={pendingApprovalsCount}>
+    <LeaveShell
+      employeeName={employee.full_name}
+      role={employee.role}
+      orgId={employee.org_id}
+      plan={employee.organizations?.plan || 'enterprise'}
+      isDemo={isDemoEmail(employee.email)}
+      pendingApprovalsCount={pendingApprovalsCount}
+    >
       {children}
     </LeaveShell>
   );

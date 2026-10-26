@@ -66,8 +66,9 @@ export async function proxy(req: NextRequest) {
   const isAuthApi = pathname.startsWith('/api/auth');
   const isHealthApi = pathname.startsWith('/api/health');
   const isDemoApi = pathname.startsWith('/api/demo');
+  const isCheckoutRoute = pathname.startsWith('/checkout') || pathname.startsWith('/api/billing');
 
-  if (isPublicLanding || isSharedView || isSharedLinkApi || isLoginPage || isSignupPage || isSetupPage || isAuthApi || isHealthApi || isDemoApi) {
+  if (isPublicLanding || isSharedView || isSharedLinkApi || isLoginPage || isSignupPage || isSetupPage || isAuthApi || isHealthApi || isDemoApi || isCheckoutRoute) {
     const { response } = await updateSession(req);
     return response;
   }

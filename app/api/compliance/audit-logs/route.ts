@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentEmployee } from '@/lib/leaveSupabase/getCurrentEmployee';
 import { getAuditLogs } from '@/lib/compliance/auditService';
+import { canAccessFeature, normalizePlanTier } from '@/lib/billing/planGating';
 
 // GET /api/compliance/audit-logs
 // Returns immutable audit trail for the organization
@@ -8,6 +9,18 @@ export async function GET(req: NextRequest) {
   const requester = await getCurrentEmployee();
   if (!requester || (requester.role !== 'hr' && requester.role !== 'hr_super_admin')) {
     return NextResponse.json({ error: 'Not authorized' }, { status: 403 });
+  }
+
+  const userPlan = normalizePlanTier(requester.organizations?.plan);
+  if (!canAccessFeature(userPlan, 'compliance_dpdp')) {
+    return NextResponse.json(
+      {
+        error: 'DPDP Act Compliance and Audit Ledger is an Enterprise-tier capability.',
+        planLocked: true,
+        requiredTier: 'enterprise',
+      },
+      { status: 403 }
+    );
   }
 
   const orgId = requester.org_id || '00000000-0000-0000-0000-000000000001';

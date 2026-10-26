@@ -55,13 +55,19 @@ export async function POST(req: NextRequest) {
 
     const emailDomain = adminEmail.split('@')[1];
 
-    // 3. Create organization
+    const planTier = (body.planTier || 'pro') as 'starter' | 'pro' | 'enterprise';
+    const billingCycle = (body.billingCycle || 'annual') as 'monthly' | 'annual';
+    const planCode = planTier === 'enterprise' ? 'plan3' : planTier === 'starter' ? 'plan1' : 'plan2';
+
+    // 3. Create organization with pending_payment status
     const { data: org, error: orgError } = await service
       .from('organizations')
       .insert({
         name,
         slug,
-        status: 'active',
+        plan: planCode,
+        status: 'pending_payment',
+        seat_limit: 50,
         settings: {
           allowed_domains: [emailDomain],
           timezone: 'Asia/Kolkata',
@@ -143,12 +149,25 @@ export async function POST(req: NextRequest) {
       is_primary: true,
     });
 
+    // 9. Create pending subscription record
+    await service.from('subscriptions').insert({
+      org_id: org.id,
+      plan_tier: planTier,
+      billing_cycle: billingCycle,
+      seat_limit: 50,
+      price_per_seat: planTier === 'enterprise' ? 65 : planTier === 'pro' ? 45 : 25,
+      currency: 'INR',
+      status: 'pending_payment',
+    });
+
     return NextResponse.json({
       success: true,
       orgId: org.id,
       slug: org.slug,
-      message: `Organization "${name}" created successfully. You can now sign in.`,
-      redirectUrl: '/login?registered=1',
+      planTier,
+      billingCycle,
+      message: `Organization "${name}" created. Please complete payment to activate your subscription.`,
+      redirectUrl: `/checkout?plan=${planTier}&cycle=${billingCycle}&org=${org.id}`,
     });
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Internal server error';

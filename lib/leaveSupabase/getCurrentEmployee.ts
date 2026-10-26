@@ -21,6 +21,12 @@ export interface CurrentEmployee {
   profile_confirmed_at: string | null;
   avatar_url: string | null;
   auth_provider: 'password' | 'google';
+  organizations?: {
+    id: string;
+    name: string;
+    status: string;
+    plan: string;
+  } | null;
 }
 
 // Sprint A — role-aware auth.
@@ -69,7 +75,7 @@ export const getCurrentEmployee = cache(async function getCurrentEmployee(): Pro
   const { data: employee, error } = await supabase
     .from('employees')
     .select(
-      'id, org_id, full_name, employee_code, email, role, department, office, reporting_lead_id, reporting_manager_id, must_change_password, profile_confirmed_at, avatar_url, auth_provider'
+      'id, org_id, full_name, employee_code, email, role, department, office, reporting_lead_id, reporting_manager_id, must_change_password, profile_confirmed_at, avatar_url, auth_provider, organizations(id, name, status, plan)'
     )
     .eq('auth_user_id', userId)
     .maybeSingle();

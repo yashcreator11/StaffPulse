@@ -16,6 +16,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import LeavePageHeader from '@/components/leave/LeavePageHeader';
+import LockedFeatureGate from '@/components/billing/LockedFeatureGate';
 
 interface AuditLogEntry {
   id: string;
@@ -32,6 +33,7 @@ interface AuditLogEntry {
 export default function ComplianceManagementPage() {
   const [logs, setLogs] = useState<AuditLogEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isPlanLocked, setIsPlanLocked] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [actionFilter, setActionFilter] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -51,6 +53,12 @@ export default function ComplianceManagementPage() {
       if (res.ok) {
         const data = await res.json();
         setLogs(data.logs || []);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        if (data.planLocked) {
+          setIsPlanLocked(true);
+          return;
+        }
       }
     } catch (err: unknown) {
       console.error(err);
@@ -134,11 +142,23 @@ export default function ComplianceManagementPage() {
       l.entity_type.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  if (isPlanLocked) {
+    return (
+      <LockedFeatureGate
+        feature="compliance_dpdp"
+        backHref="/leave/admin"
+        backLabel="Back to Leave Balances"
+      />
+    );
+  }
+
   return (
     <div className="space-y-6 sm:space-y-8">
       <LeavePageHeader
         title="Compliance & Data Privacy"
         description="Immutable audit logging, India DPDP Act 2023 / GDPR portable data exports, and Right-to-be-Forgotten workflows."
+        backHref="/leave/admin"
+        backLabel="Back to Leave Balances"
       />
 
       {toast && (

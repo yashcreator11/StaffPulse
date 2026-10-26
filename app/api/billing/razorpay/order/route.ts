@@ -29,17 +29,43 @@ export async function POST(req: NextRequest) {
   const totalStaff = Math.max(count || 1, Number(body.staffCount) || 1);
   const quote = computeQuote(planId, cadence, totalStaff);
 
+  // Apply optional coupon discount
+  let finalSubtotal = quote.billingCycleTotal;
+  let couponDiscount = 0;
+  let appliedCouponCode: string | null = null;
+
+  if (body.couponCode) {
+    const { validateCoupon } = await import('@/lib/billing/couponService');
+    const couponRes = await validateCoupon(String(body.couponCode), planId, quote.billingCycleTotal);
+    if (couponRes.valid && couponRes.coupon) {
+      couponDiscount = couponRes.coupon.discountAmount;
+      finalSubtotal = couponRes.coupon.finalSubtotal;
+      appliedCouponCode = couponRes.coupon.code;
+    }
+  }
+
+  const effectiveQuote = {
+    ...quote,
+    billingCycleTotal: finalSubtotal,
+  };
+
   try {
     const order = await createRazorpayOrder({
       orgId,
-      quote,
+      quote: effectiveQuote,
       customerEmail: requester.email,
+      notes: {
+        couponCode: appliedCouponCode || '',
+        couponDiscount: String(couponDiscount),
+      },
     });
 
     return NextResponse.json({
       success: true,
       order,
-      quote,
+      quote: effectiveQuote,
+      couponDiscount,
+      appliedCouponCode,
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Failed to create order';

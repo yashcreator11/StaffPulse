@@ -127,6 +127,8 @@ export default function BillingManagementPage() {
       <LeavePageHeader
         title="Billing & Subscription Plans"
         description="Monitor active seat capacity, upgrade your SaaS tier, and manage invoices and tax receipts."
+        backHref="/leave/admin"
+        backLabel="Back to Leave Balances"
       />
 
       {message && (

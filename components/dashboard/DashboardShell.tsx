@@ -99,6 +99,9 @@ import {
   PanelLeftOpen,
   Eye,
   Fingerprint,
+  Home,
+  Sparkles,
+  Lock,
 } from 'lucide-react';
 import ThemeToggle from '@/components/ThemeToggle';
 
@@ -141,9 +144,10 @@ function buildNavGroups(opts: {
   onOpenHolidays?: () => void;
   onOpenSettings?: () => void;
   onUpload?: () => void;
+  isDemo?: boolean;
   exportSlot?: React.ReactNode;
 }): NavGroup[] {
-  const { variant, availableSections, holidayCount, onOpenHolidays, onOpenSettings, onUpload, exportSlot } = opts;
+  const { variant, availableSections, holidayCount, onOpenHolidays, onOpenSettings, onUpload, isDemo, exportSlot } = opts;
   const groups: NavGroup[] = [];
 
   // ── Overview — same three items for every variant, just filtered to
@@ -167,7 +171,15 @@ function buildNavGroups(opts: {
   // ── Admin — HR gets everything; team gets Export only; shared gets nothing.
   if (variant === 'hr') {
     const adminItems: NavItem[] = [];
-    if (onUpload) adminItems.push({ kind: 'action', id: 'upload', label: 'Upload CSV', icon: Upload, onClick: onUpload });
+    if (onUpload) {
+      adminItems.push({
+        kind: 'action',
+        id: 'upload',
+        label: isDemo ? 'Upload CSV (Live Plan)' : 'Upload CSV',
+        icon: isDemo ? Lock : Upload,
+        onClick: onUpload,
+      });
+    }
     if (exportSlot) adminItems.push({ kind: 'node', id: 'export', label: 'Export', icon: Download, node: exportSlot });
     if (onOpenSettings) adminItems.push({ kind: 'action', id: 'settings', label: 'Settings', icon: Settings, onClick: onOpenSettings });
     if (onOpenHolidays) {
@@ -267,6 +279,8 @@ export default function DashboardShell({
   onOpenSettings,
   onUpload,
   onSignOut,
+  isDemo,
+  onExitDemo,
   exportSlot,
   recordCount,
   children,
@@ -278,11 +292,13 @@ export default function DashboardShell({
   onOpenSettings?: () => void;
   onUpload?: () => void;
   onSignOut?: () => void;
+  isDemo?: boolean;
+  onExitDemo?: () => void;
   exportSlot?: React.ReactNode;
   recordCount?: number;
   children: React.ReactNode;
 }) {
-  const groups = buildNavGroups({ variant, availableSections, holidayCount, onOpenHolidays, onOpenSettings, onUpload, exportSlot });
+  const groups = buildNavGroups({ variant, availableSections, holidayCount, onOpenHolidays, onOpenSettings, onUpload, isDemo, exportSlot });
   const scrollableGroups = groups.filter((g) => g.items.some((i) => i.kind === 'scroll'));
   const flatScrollItems = scrollableGroups.flatMap((g) => g.items).filter((i): i is Extract<NavItem, { kind: 'scroll' }> => i.kind === 'scroll');
 
@@ -360,6 +376,27 @@ export default function DashboardShell({
               <span className="text-[var(--text-muted)] text-[11px]">Read-only · {recordCount.toLocaleString()} records</span>
             </div>
           )}
+          {isDemo && onExitDemo && (
+            <div className={`mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 ${collapsed ? 'p-1.5 text-center' : 'p-2.5'}`}>
+              {!collapsed && (
+                <div className="flex items-center gap-1.5 text-[10px] font-bold text-amber-700 dark:text-amber-400 mb-1.5">
+                  <Sparkles size={12} className="text-amber-500" />
+                  <span>Demo Sandbox</span>
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={onExitDemo}
+                title={collapsed ? 'Exit Demo & Return to Home' : undefined}
+                className={`w-full flex items-center justify-center gap-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-bold text-[11px] transition-colors shadow-sm ${
+                  collapsed ? 'h-8 px-0' : 'py-1.5 px-2'
+                }`}
+              >
+                <Home size={13} />
+                {!collapsed && <span>Exit to Home</span>}
+              </button>
+            </div>
+          )}
         </div>
 
         <nav className={`scroll-thin flex-1 overflow-y-auto py-2 space-y-5 ${collapsed ? 'px-2' : 'px-3'}`}>
@@ -421,6 +458,16 @@ export default function DashboardShell({
             <p className="truncate text-sm font-semibold text-[var(--text-primary)]">StaffPulse</p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
+            {isDemo && onExitDemo && (
+              <button
+                type="button"
+                onClick={onExitDemo}
+                className="flex items-center gap-1 rounded-lg bg-amber-500 px-2.5 py-1 text-xs font-bold text-white shadow-sm hover:bg-amber-600 transition-colors"
+              >
+                <Home size={13} />
+                <span>Exit Demo</span>
+              </button>
+            )}
             <ThemeToggle onChange={syncThemeToServer} />
             {onSignOut && (
               <button

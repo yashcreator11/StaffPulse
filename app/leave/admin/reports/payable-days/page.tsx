@@ -17,6 +17,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import LeavePageHeader from '@/components/leave/LeavePageHeader';
+import LockedFeatureGate from '@/components/billing/LockedFeatureGate';
 import { exportRowsAsExcel, exportRowsAsCSV } from '@/lib/exportData';
 
 interface ReportEmployee {
@@ -72,6 +73,7 @@ export default function PayableDaysReportPage() {
 
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [isPlanLocked, setIsPlanLocked] = useState<boolean>(false);
   const [reportData, setReportData] = useState<ReportData | null>(null);
 
   // Filters for generated data
@@ -89,6 +91,10 @@ export default function PayableDaysReportPage() {
       );
       if (!res.ok) {
         const data = await res.json();
+        if (data.planLocked) {
+          setIsPlanLocked(true);
+          return;
+        }
         throw new Error(data.error || `Failed to fetch report (${res.status})`);
       }
       const data: ReportData = await res.json();
@@ -190,11 +196,23 @@ export default function PayableDaysReportPage() {
   // Generate Year options
   const years = [currentYear - 1, currentYear, currentYear + 1];
 
+  if (isPlanLocked) {
+    return (
+      <LockedFeatureGate
+        feature="payable_days"
+        backHref="/leave/admin"
+        backLabel="Back to Leave Balances"
+      />
+    );
+  }
+
   return (
     <div className="space-y-6">
       <LeavePageHeader
         title="Monthly Payable-Days Export"
         description="Calculate calendar-month gross days netted against salary-cycle (25th to 24th) LWP leave for payroll."
+        backHref="/leave/admin"
+        backLabel="Back to Leave Balances"
         actions={
           <div className="flex items-center gap-2">
             <button

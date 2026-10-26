@@ -1,5 +1,6 @@
 import { requireLeaveAccess } from '@/lib/leaveSupabase/requireLeaveAccess';
 import LeaveShell from '@/components/leave/LeaveShell';
+import { isDemoEmail } from '@/lib/isDemoSandbox';
 
 // Protects app/leave/attendance/** — feedback item: "Attendance days
 // that need your input" (MyAttendanceExceptions) used to live as a card
@@ -24,7 +25,14 @@ export default async function LeaveAttendanceLayout({
   });
 
   return (
-    <LeaveShell employeeName={employee.full_name} role={employee.role} pendingApprovalsCount={pendingApprovalsCount}>
+    <LeaveShell
+      employeeName={employee.full_name}
+      role={employee.role}
+      orgId={employee.org_id}
+      plan={employee.organizations?.plan || 'enterprise'}
+      isDemo={isDemoEmail(employee.email)}
+      pendingApprovalsCount={pendingApprovalsCount}
+    >
       {children}
     </LeaveShell>
   );

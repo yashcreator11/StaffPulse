@@ -101,7 +101,7 @@ _P0 = blocks selling to a second customer. P1 = needed before public launch. P2 
 - [x] Make the department/group column optional in the mapping step; support group and hierarchy mapping
 - [x] Track and display "data last updated" time for day view
 - [x] ✔ Verify where data really lives (`lib/storage.ts`, `employeeStore.ts`); confirm no browser-only paths bypass the database
-- [x] API or small sync agent so devices push punches automatically (/api/biometrics/push for eSSL, ZKTeco, Matrix) (P2)
+- [x] API and standalone Windows sync agent so devices push punches automatically (/api/biometrics/push for eSSL, ZKTeco, Matrix, Realtime, Hikvision with dedicated hardware hub at `/leave/admin/devices`) (P2)
 
 ---
 
@@ -125,10 +125,10 @@ _P0 = blocks selling to a second customer. P1 = needed before public launch. P2 
 - [x] Guided setup wizard: company, offices, holidays, leave policy, login method, how people are grouped (departments, teams, branches or none), employees, first upload
 - [x] Employee CSV import with validation and a downloadable template
 - [x] Opening-balance import
-- [x] Demo mode with sample data so prospects can try the dashboard first
+- [x] 1-Click Free Trial Sandboxes (Starter, Pro, Enterprise) pre-seeded with dummy data, top alert strip, and locked CSV upload/hardware push preview mode
 - [x] Org settings page: branding, time zone, language, data retention
 - [x] Platform super-admin console: list tenants, usage, plan, suspend, controlled support access with an audit trail
-- [x] In-app help, tooltips and an empty state on every screen (InfoTooltip, guided badges, first-run onboarding sandbox)
+- [x] Interactive Product Tour guide on first login with 6-step highlight, progress dots, and on-demand replay from user avatar menu
 - [x] Move `scripts/bulk-create-employee-auth.mjs` out of the customer path or turn it into an admin feature
 
 ---

@@ -1,5 +1,6 @@
 import { requireLeaveAccess } from '@/lib/leaveSupabase/requireLeaveAccess';
 import LeaveShell from '@/components/leave/LeaveShell';
+import { isDemoEmail } from '@/lib/isDemoSandbox';
 
 // Protects app/leave/me/** — employee self-service: apply, own balance,
 // own history, personal calendar.
@@ -24,10 +25,18 @@ export default async function LeaveMeLayout({
 }) {
   const { employee, pendingApprovalsCount } = await requireLeaveAccess({
     redirectHrSuperAdminTo: '/leave/admin',
+    requiredFeature: 'leave_portal',
   });
 
   return (
-    <LeaveShell employeeName={employee.full_name} role={employee.role} pendingApprovalsCount={pendingApprovalsCount}>
+    <LeaveShell
+      employeeName={employee.full_name}
+      role={employee.role}
+      orgId={employee.org_id}
+      plan={employee.organizations?.plan || 'enterprise'}
+      isDemo={isDemoEmail(employee.email)}
+      pendingApprovalsCount={pendingApprovalsCount}
+    >
       {children}
     </LeaveShell>
   );

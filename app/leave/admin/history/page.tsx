@@ -345,6 +345,8 @@ export default function LeaveTrackerPage() {
     <div className="space-y-6">
       <LeavePageHeader
         title="Leave Tracker"
+        backHref="/leave/admin"
+        backLabel="Back to Leave Balances"
         actions={
           canRecordLeave ? (
             <div className="flex items-center gap-2">

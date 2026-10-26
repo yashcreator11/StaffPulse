@@ -1,5 +1,6 @@
 import { requireLeaveAccess } from '@/lib/leaveSupabase/requireLeaveAccess';
 import LeaveShell from '@/components/leave/LeaveShell';
+import { isDemoEmail } from '@/lib/isDemoSandbox';
 
 // Protects app/leave/team/** — the read-only leave-records view of a
 // manager or lead's own team: roster + balances + leave history, no
@@ -22,10 +23,18 @@ export default async function LeaveTeamLayout({
 }) {
   const { employee, pendingApprovalsCount } = await requireLeaveAccess({
     allowedRoles: ['lead', 'manager'],
+    requiredFeature: 'leave_portal',
   });
 
   return (
-    <LeaveShell employeeName={employee.full_name} role={employee.role} pendingApprovalsCount={pendingApprovalsCount}>
+    <LeaveShell
+      employeeName={employee.full_name}
+      role={employee.role}
+      orgId={employee.org_id}
+      plan={employee.organizations?.plan || 'enterprise'}
+      isDemo={isDemoEmail(employee.email)}
+      pendingApprovalsCount={pendingApprovalsCount}
+    >
       {children}
     </LeaveShell>
   );

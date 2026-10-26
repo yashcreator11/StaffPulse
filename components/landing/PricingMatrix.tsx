@@ -188,13 +188,20 @@ export default function PricingMatrix({ onRequestDemo }: PricingMatrixProps) {
                 </div>
               </div>
 
-              <div className="pt-8">
+              <div className="pt-8 space-y-2">
                 <Link
                   href="/signup?plan=starter"
                   className="w-full py-2.5 px-4 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] hover:bg-[var(--border)] text-[var(--text-primary)] font-semibold text-xs transition-all flex items-center justify-center gap-2"
                 >
-                  <span>Start 14-Day Free Trial</span>
+                  <span>Select Starter</span>
                   <ArrowRight className="w-3.5 h-3.5" />
+                </Link>
+                <Link
+                  href="/login?demo=starter"
+                  className="w-full py-2 px-3 rounded-xl border border-dashed border-emerald-500/40 bg-emerald-500/5 hover:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold text-[11px] transition-all flex items-center justify-center gap-1.5"
+                >
+                  <Sparkles className="w-3 h-3" />
+                  <span>Try Live Starter Sandbox</span>
                 </Link>
               </div>
             </div>
@@ -268,15 +275,16 @@ export default function PricingMatrix({ onRequestDemo }: PricingMatrixProps) {
                   href="/signup?plan=pro"
                   className="w-full py-3 px-4 rounded-xl bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white font-bold text-xs shadow-lg shadow-orange-500/20 transition-all flex items-center justify-center gap-2"
                 >
-                  <span>Start 14-Day Free Trial</span>
+                  <span>Select Pro Growth</span>
                   <ArrowRight className="w-4 h-4" />
                 </Link>
-                <button
-                  onClick={() => onRequestDemo()}
-                  className="w-full text-center text-[11px] text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors py-1"
+                <Link
+                  href="/login?demo=pro"
+                  className="w-full py-2 px-3 rounded-xl border border-dashed border-orange-500/40 bg-orange-500/5 hover:bg-orange-500/10 text-orange-600 dark:text-orange-400 font-bold text-[11px] transition-all flex items-center justify-center gap-1.5"
                 >
-                  Or request a guided walkthrough →
-                </button>
+                  <Sparkles className="w-3 h-3" />
+                  <span>Try Live Pro Sandbox</span>
+                </Link>
               </div>
             </div>
 
@@ -331,7 +339,7 @@ export default function PricingMatrix({ onRequestDemo }: PricingMatrixProps) {
                 </div>
               </div>
 
-              <div className="pt-8">
+              <div className="pt-8 space-y-2">
                 <button
                   onClick={() => onRequestDemo()}
                   className="w-full py-2.5 px-4 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] hover:bg-[var(--border)] text-[var(--text-primary)] font-semibold text-xs transition-all flex items-center justify-center gap-2"
@@ -339,6 +347,13 @@ export default function PricingMatrix({ onRequestDemo }: PricingMatrixProps) {
                   <span>Contact Enterprise Sales</span>
                   <ArrowRight className="w-3.5 h-3.5" />
                 </button>
+                <Link
+                  href="/login?demo=enterprise"
+                  className="w-full py-2 px-3 rounded-xl border border-dashed border-blue-500/40 bg-blue-500/5 hover:bg-blue-500/10 text-blue-600 dark:text-blue-400 font-bold text-[11px] transition-all flex items-center justify-center gap-1.5"
+                >
+                  <Sparkles className="w-3 h-3" />
+                  <span>Try Live Enterprise Sandbox</span>
+                </Link>
               </div>
             </div>
           </div>

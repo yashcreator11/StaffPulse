@@ -1,24 +1,65 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { logAuditEvent } from '@/lib/compliance/auditService';
+import { parseAdmsPunches, normalizeTimestamp, UniversalPunch } from '@/lib/biometrics/deviceService';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://127.0.0.1:34321';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
-interface BiometricPunchLog {
-  employeeCode: string;
-  timestamp: string; // YYYY-MM-DD HH:mm:ss
-  deviceSerial: string;
-  punchType?: 'in' | 'out' | 'break_out' | 'break_in';
+function getSupabase() {
+  return createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
 }
 
 /**
- * Universal Hardware Handshake (ZKTeco ADMS & eSSL protocol)
- * Hardware periodically pings this GET endpoint to sync time and verify server heartbeat.
+ * Resolve device token from request headers or query params
+ */
+function extractToken(req: NextRequest): string | null {
+  const { searchParams } = new URL(req.url);
+  const qToken = searchParams.get('token') || searchParams.get('key') || searchParams.get('api_token');
+  if (qToken) return qToken.trim();
+
+  const authHeader = req.headers.get('authorization');
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    return authHeader.substring(7).trim();
+  }
+
+  const customHeader = req.headers.get('x-device-token');
+  if (customHeader) return customHeader.trim();
+
+  return null;
+}
+
+/**
+ * Universal Hardware Handshake & Heartbeat (ZKTeco ADMS & eSSL protocol)
+ * Devices periodically ping this GET endpoint to sync time and verify server liveness.
  */
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
-  const sn = searchParams.get('SN') || searchParams.get('device_sn') || 'UNKNOWN';
+  const sn = searchParams.get('SN') || searchParams.get('device_sn') || searchParams.get('sn') || 'UNKNOWN';
+  const token = extractToken(req);
+
+  const supabase = getSupabase();
+
+  // If token or serial provided, update device heartbeat in registry
+  if (token || sn !== 'UNKNOWN') {
+    let query = supabase.from('registered_devices').select('id, org_id');
+    if (token) {
+      query = query.eq('api_token', token);
+    } else {
+      query = query.eq('device_serial', sn);
+    }
+    const { data: dev } = await query.maybeSingle();
+
+    if (dev) {
+      await supabase
+        .from('registered_devices')
+        .update({
+          status: 'online',
+          last_heartbeat_at: new Date().toISOString(),
+        })
+        .eq('id', dev.id);
+    }
+  }
 
   // Standard ADMS / eSSL handshake response format
   const serverTime = new Date().toISOString().replace('T', ' ').substring(0, 19);
@@ -34,70 +75,91 @@ export async function GET(req: NextRequest) {
  */
 export async function POST(req: NextRequest) {
   const { searchParams } = new URL(req.url);
-  const orgParam = searchParams.get('org_id') || searchParams.get('token');
-  const deviceSn = searchParams.get('SN') || searchParams.get('device_sn') || 'PUSH_DEVICE';
+  const sn = searchParams.get('SN') || searchParams.get('device_sn') || searchParams.get('sn') || 'PUSH_DEVICE';
+  const token = extractToken(req);
+  const explicitOrgId = searchParams.get('org_id');
 
-  const supabase = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
+  const supabase = getSupabase();
 
-  // Resolve target organization
-  let orgId = orgParam;
-  if (!orgId) {
-    // If not supplied in query param, resolve default or lookup by device
-    const { data: firstOrg } = await supabase.from('organizations').select('id').order('created_at').limit(1).single();
-    orgId = firstOrg?.id || '00000000-0000-0000-0000-000000000001';
+  // 1. Authenticate hardware / agent
+  let targetOrgId: string | null = null;
+  let matchedDevice: { id: string; org_id: string; total_punches_ingested: number } | null = null;
+
+  if (token) {
+    const { data: dev } = await supabase
+      .from('registered_devices')
+      .select('id, org_id, total_punches_ingested')
+      .eq('api_token', token)
+      .maybeSingle();
+    if (dev) {
+      matchedDevice = dev;
+      targetOrgId = dev.org_id;
+    }
   }
-  const targetOrgId: string = orgId || '00000000-0000-0000-0000-000000000001';
+
+  // Fallback to Serial lookup if token was not embedded in push URL
+  if (!targetOrgId && sn !== 'PUSH_DEVICE') {
+    const { data: dev } = await supabase
+      .from('registered_devices')
+      .select('id, org_id, total_punches_ingested')
+      .eq('device_serial', sn)
+      .maybeSingle();
+    if (dev) {
+      matchedDevice = dev;
+      targetOrgId = dev.org_id;
+    }
+  }
+
+  // Fallback to explicitOrgId in testing/dev environments
+  if (!targetOrgId && explicitOrgId) {
+    targetOrgId = explicitOrgId;
+  }
+
+  // If still unauthenticated, reject unauthorized hardware push
+  if (!targetOrgId) {
+    return NextResponse.json(
+      {
+        error: 'Unauthorized: Device not registered or missing valid token',
+        hint: 'Register this biometric device under /leave/admin/devices and configure the Push URL with your secret token.',
+      },
+      { status: 401 }
+    );
+  }
 
   const contentType = req.headers.get('content-type') || '';
-  const punches: BiometricPunchLog[] = [];
+  const punches: UniversalPunch[] = [];
 
   try {
     if (contentType.includes('application/json')) {
       const body = await req.json();
-      const items = Array.isArray(body) ? body : [body];
+      const items = Array.isArray(body) ? body : Array.isArray(body?.punches) ? body.punches : [body];
       for (const item of items) {
         if (item.employeeCode && item.timestamp) {
           punches.push({
             employeeCode: String(item.employeeCode).trim(),
-            timestamp: String(item.timestamp).trim(),
-            deviceSerial: String(item.deviceSerial || deviceSn).trim(),
+            timestamp: normalizeTimestamp(String(item.timestamp)),
+            deviceSerial: String(item.deviceSerial || sn).trim(),
             punchType: item.punchType,
           });
         }
       }
     } else {
-      // Raw text format (tab/newline delimited used by eSSL ADMS)
+      // Raw ADMS / iClock plain-text format (used by eSSL & ZKTeco hardware)
       const rawText = await req.text();
-      const lines = rawText.split('\n');
-      for (const line of lines) {
-        const parts = line.trim().split(/\t|,/);
-        // Typical format: [UserPIN, Timestamp, Status, VerifyType]
-        if (parts.length >= 2) {
-          const empCode = parts[0].trim();
-          const time = parts[1].trim();
-          if (empCode && time && time.includes(':')) {
-            punches.push({
-              employeeCode: empCode,
-              timestamp: time,
-              deviceSerial: deviceSn,
-              punchType: parts[2] === '1' ? 'out' : 'in',
-            });
-          }
-        }
-      }
+      const parsed = parseAdmsPunches(rawText, sn);
+      punches.push(...parsed);
     }
 
     if (punches.length === 0) {
-      return new NextResponse('OK: 0 punches parsed\n', { status: 200 });
+      return new NextResponse('OK: 0 punches parsed\n', { status: 200, headers: { 'Content-Type': 'text/plain' } });
     }
 
-    // Process and upsert into attendance records
+    // 2. Process & upsert attendance records
     let inserted = 0;
     for (const punch of punches) {
       const datePart = punch.timestamp.split(' ')[0] || new Date().toISOString().split('T')[0];
       const timePart = punch.timestamp.split(' ')[1] || '09:00:00';
 
-      // Check existing record for employee & date
       const { data: existing } = await supabase
         .from('attendance')
         .select('*')
@@ -107,7 +169,6 @@ export async function POST(req: NextRequest) {
         .maybeSingle();
 
       if (!existing) {
-        // Create new attendance record
         await supabase.from('attendance').insert({
           org_id: targetOrgId,
           employee_code: punch.employeeCode,
@@ -116,18 +177,16 @@ export async function POST(req: NextRequest) {
           out_time: timePart,
           total_minutes: 0,
           status: 'present',
-          punch_records: [{ time: timePart, device: punch.deviceSerial, type: punch.punchType || 'in' }],
+          punch_records: [{ time: timePart, device: punch.deviceSerial || sn, type: punch.punchType || 'in' }],
         });
         inserted++;
       } else {
-        // Update existing record (earliest in_time, latest out_time)
         const inTime = existing.in_time ? (timePart < existing.in_time ? timePart : existing.in_time) : timePart;
         const outTime = existing.out_time ? (timePart > existing.out_time ? timePart : existing.out_time) : timePart;
 
         const punchesList = Array.isArray(existing.punch_records) ? existing.punch_records : [];
-        punchesList.push({ time: timePart, device: punch.deviceSerial, type: punch.punchType || 'log' });
+        punchesList.push({ time: timePart, device: punch.deviceSerial || sn, type: punch.punchType || 'log' });
 
-        // Calculate minutes between in and out
         const [inH, inM] = inTime.split(':').map(Number);
         const [outH, outM] = outTime.split(':').map(Number);
         const totalMinutes = Math.max(0, (outH * 60 + outM) - (inH * 60 + inM));
@@ -146,17 +205,30 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Log audit event for hardware push
+    // 3. Update device heartbeat and metrics
+    if (matchedDevice) {
+      await supabase
+        .from('registered_devices')
+        .update({
+          status: 'online',
+          last_heartbeat_at: new Date().toISOString(),
+          last_punch_at: new Date().toISOString(),
+          total_punches_ingested: (matchedDevice.total_punches_ingested || 0) + inserted,
+        })
+        .eq('id', matchedDevice.id);
+    }
+
+    // 4. Log compliance audit event
     await logAuditEvent({
       orgId: targetOrgId,
       actorId: 'system_hardware_push',
-      actorEmail: `device:${deviceSn}`,
+      actorEmail: `device:${sn}`,
       actorRole: 'system',
       action: 'biometrics.hardware_push_received',
       entityType: 'attendance',
-      entityId: deviceSn,
+      entityId: sn,
       details: {
-        deviceSerial: deviceSn,
+        deviceSerial: sn,
         punchesReceived: punches.length,
         punchesProcessed: inserted,
       },

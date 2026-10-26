@@ -107,7 +107,12 @@ export default function ViolationsPage() {
 
   return (
     <div className="space-y-6">
-      <LeavePageHeader title="Violations" />
+      <LeavePageHeader
+        title="Violations"
+        description="Policy deviations, uncertified extended sick leaves, and negative balance alerts."
+        backHref="/leave/admin"
+        backLabel="Back to Leave Balances"
+      />
 
       {error && (
         <div className="bg-red-900/30 border border-red-500/30 text-red-700 dark:text-red-300 text-xs rounded-lg px-3 py-2">

@@ -1,5 +1,6 @@
 import { requireLeaveAccess } from '@/lib/leaveSupabase/requireLeaveAccess';
 import LeaveShell from '@/components/leave/LeaveShell';
+import { isDemoEmail } from '@/lib/isDemoSandbox';
 
 // Protects everything under app/leave/admin/**. Deliberately a layout,
 // not middleware.ts — this only runs for this route subtree, so it can
@@ -31,10 +32,18 @@ export default async function LeaveAdminLayout({
 }) {
   const { employee, pendingApprovalsCount } = await requireLeaveAccess({
     allowedRoles: ['hr', 'hr_super_admin'],
+    requiredFeature: 'leave_portal',
   });
 
   return (
-    <LeaveShell employeeName={employee.full_name} role={employee.role} pendingApprovalsCount={pendingApprovalsCount}>
+    <LeaveShell
+      employeeName={employee.full_name}
+      role={employee.role}
+      orgId={employee.org_id}
+      plan={employee.organizations?.plan || 'enterprise'}
+      isDemo={isDemoEmail(employee.email)}
+      pendingApprovalsCount={pendingApprovalsCount}
+    >
       {children}
     </LeaveShell>
   );

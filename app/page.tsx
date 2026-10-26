@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { getCurrentEmployee } from '@/lib/leaveSupabase/getCurrentEmployee';
 import { createLeaveClient } from '@/lib/leaveSupabase/server';
 import { getManagedEmployeeIds } from '@/lib/leaveSupabase/organization';
+import { isPaymentPending } from '@/lib/billing/billingGuard';
 import DashboardClient from './DashboardClient';
 import LandingPage from '@/components/landing/LandingPage';
 
@@ -40,6 +41,12 @@ export default async function Page({
   if (!employee) {
     return <LandingPage />;
   }
+
+  // Payment Gate: if the organization is pending payment, intercept and redirect to /checkout
+  if (isPaymentPending(employee)) {
+    redirect('/checkout');
+  }
+
   if (employee.role === 'employee') {
     redirect('/leave/me');
   }

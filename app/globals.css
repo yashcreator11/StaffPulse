@@ -68,6 +68,9 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-card: var(--bg-card);
+  --color-surface: var(--bg-surface);
+  --color-elevated: var(--bg-elevated);
   --color-bg-surface: var(--bg-surface);
   --color-bg-elevated: var(--bg-elevated);
   --color-bg-card: var(--bg-card);

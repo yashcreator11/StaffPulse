@@ -10,6 +10,8 @@ export default async function LeaveAnalyticsPage() {
       <LeavePageHeader
         title={`Leave Analytics — ${formatFYLabel(fyStartYear)}`}
         description="Strategic workforce leave intelligence, attachment pattern detection, and capacity planning for HR leadership."
+        backHref="/leave/admin"
+        backLabel="Back to Leave Balances"
       />
       <LeaveAnalyticsDashboard initialFyStartYear={fyStartYear} />
     </div>

@@ -35,7 +35,41 @@ import {
   Sparkles,
   LayoutGrid,
   List,
+  Tag,
+  Percent,
+  Trash2,
+  Ticket,
+  Save,
 } from 'lucide-react';
+
+export interface PlatformPricingPlan {
+  id: string;
+  plan_id: 'starter' | 'pro' | 'enterprise';
+  plan_name: string;
+  base_employees: number;
+  monthly_base_price: number;
+  annual_base_price: number;
+  monthly_extra_per_emp: number;
+  annual_extra_per_emp: number;
+  annual_discount_percent: number;
+  features: string[];
+  updated_at: string;
+}
+
+export interface MasterCoupon {
+  id: string;
+  code: string;
+  description: string | null;
+  discount_type: 'percentage' | 'fixed';
+  discount_value: number;
+  min_order_amount: number;
+  max_discount_cap: number | null;
+  max_redemptions: number | null;
+  times_redeemed: number;
+  valid_until: string | null;
+  is_active: boolean;
+  created_at: string;
+}
 
 interface OrgItem {
   id: string;
@@ -80,10 +114,29 @@ interface AuditLogItem {
 function MasterDashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const initialTab = (searchParams.get('tab') as 'orgs' | 'leads' | 'audit' | 'system') || 'orgs';
+  type MasterTab = 'orgs' | 'leads' | 'audit' | 'system' | 'pricing';
+  const initialTab = (searchParams.get('tab') as MasterTab) || 'orgs';
 
-  const [activeTab, setActiveTab] = useState<'orgs' | 'leads' | 'audit' | 'system'>(initialTab);
+  const [activeTab, setActiveTab] = useState<MasterTab>(initialTab);
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
+
+  // Pricing & Coupons State
+  const [pricingPlans, setPricingPlans] = useState<PlatformPricingPlan[]>([]);
+  const [coupons, setCoupons] = useState<MasterCoupon[]>([]);
+  const [loadingPricing, setLoadingPricing] = useState(false);
+  const [savingPlanId, setSavingPlanId] = useState<string | null>(null);
+  const [pricingNotice, setPricingNotice] = useState<string | null>(null);
+
+  // New Coupon Form
+  const [couponCode, setCouponCode] = useState('');
+  const [couponType, setCouponType] = useState<'percentage' | 'fixed'>('percentage');
+  const [couponValue, setCouponValue] = useState<number>(20);
+  const [couponMinOrder, setCouponMinOrder] = useState<number>(1000);
+  const [couponMaxCap, setCouponMaxCap] = useState<string>('');
+  const [couponMaxUses, setCouponMaxUses] = useState<string>('');
+  const [couponValidUntil, setCouponValidUntil] = useState<string>('');
+  const [creatingCoupon, setCreatingCoupon] = useState(false);
+  const [couponFormError, setCouponFormError] = useState<string | null>(null);
 
   // Organizations State
   const [orgs, setOrgs] = useState<OrgItem[]>([]);
@@ -143,7 +196,7 @@ function MasterDashboardContent() {
   };
 
   // Sync tab with URL
-  const handleTabChange = (tab: 'orgs' | 'leads' | 'audit' | 'system') => {
+  const handleTabChange = (tab: MasterTab) => {
     setActiveTab(tab);
     router.replace(`/master?tab=${tab}`);
   };
@@ -197,6 +250,122 @@ function MasterDashboardContent() {
     }
   }, []);
 
+  // Fetch Platform Pricing & Coupons
+  const fetchPricingAndCoupons = React.useCallback(async () => {
+    setLoadingPricing(true);
+    try {
+      const [pricingRes, couponsRes] = await Promise.all([
+        fetch('/api/master/pricing'),
+        fetch('/api/master/coupons'),
+      ]);
+      if (pricingRes.ok) {
+        const pData = await pricingRes.json();
+        setPricingPlans(pData.plans || []);
+      }
+      if (couponsRes.ok) {
+        const cData = await couponsRes.json();
+        setCoupons(cData.coupons || []);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setLoadingPricing(false);
+    }
+  }, []);
+
+  // Local field updater for plan pricing inputs
+  const updatePlanField = (planId: string, field: keyof PlatformPricingPlan, value: any) => {
+    setPricingPlans((prev) =>
+      prev.map((p) => (p.plan_id === planId ? { ...p, [field]: value } : p))
+    );
+  };
+
+  // Update Plan Pricing
+  const handleSavePlan = async (plan: PlatformPricingPlan) => {
+    setSavingPlanId(plan.plan_id);
+    setPricingNotice(null);
+    try {
+      const res = await fetch('/api/master/pricing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          planId: plan.plan_id,
+          monthlyBasePrice: plan.monthly_base_price,
+          annualBasePrice: plan.annual_base_price,
+          monthlyExtraPerEmp: plan.monthly_extra_per_emp,
+          annualExtraPerEmp: plan.annual_extra_per_emp,
+          annualDiscountPercent: plan.annual_discount_percent,
+          baseEmployees: plan.base_employees,
+        }),
+      });
+      if (!res.ok) throw new Error('Failed to update plan pricing');
+      setPricingNotice(`Saved pricing updates for ${plan.plan_name}`);
+      fetchPricingAndCoupons();
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Error updating plan');
+    } finally {
+      setSavingPlanId(null);
+    }
+  };
+
+  // Create Coupon
+  const handleCreateCoupon = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCreatingCoupon(true);
+    setCouponFormError(null);
+    try {
+      const res = await fetch('/api/master/coupons', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code: couponCode,
+          discountType: couponType,
+          discountValue: couponValue,
+          minOrderAmount: couponMinOrder,
+          maxDiscountCap: couponMaxCap ? Number(couponMaxCap) : null,
+          maxRedemptions: couponMaxUses ? Number(couponMaxUses) : null,
+          validUntil: couponValidUntil ? couponValidUntil : null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to create coupon');
+      setCouponCode('');
+      setCouponMaxCap('');
+      setCouponMaxUses('');
+      setCouponValidUntil('');
+      fetchPricingAndCoupons();
+    } catch (err: unknown) {
+      setCouponFormError(err instanceof Error ? err.message : 'Error creating coupon');
+    } finally {
+      setCreatingCoupon(false);
+    }
+  };
+
+  // Toggle Coupon Active Status
+  const handleToggleCoupon = async (id: string, currentActive: boolean) => {
+    try {
+      await fetch('/api/master/coupons', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'toggle', id, isActive: !currentActive }),
+      });
+      fetchPricingAndCoupons();
+    } catch {
+      // ignore
+    }
+  };
+
+  // Delete Coupon
+  const handleDeleteCoupon = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this coupon code?')) return;
+    try {
+      await fetch(`/api/master/coupons?id=${id}`, { method: 'DELETE' });
+      fetchPricingAndCoupons();
+    } catch {
+      // ignore
+    }
+  };
+
   useEffect(() => {
     fetchOrgs();
   }, [fetchOrgs]);
@@ -204,7 +373,8 @@ function MasterDashboardContent() {
   useEffect(() => {
     if (activeTab === 'leads') fetchLeads();
     if (activeTab === 'audit') fetchAuditLogs();
-  }, [activeTab, fetchLeads, fetchAuditLogs]);
+    if (activeTab === 'pricing') fetchPricingAndCoupons();
+  }, [activeTab, fetchLeads, fetchAuditLogs, fetchPricingAndCoupons]);
 
   // Update Lead Status
   const handleUpdateLeadStatus = async (id: string, newStatus: DemoLead['status']) => {
@@ -562,6 +732,18 @@ function MasterDashboardContent() {
           >
             <Activity className="w-4 h-4" />
             <span>System Health & Jobs</span>
+          </button>
+
+          <button
+            onClick={() => handleTabChange('pricing')}
+            className={`flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-bold border-b-2 transition-all ${
+              activeTab === 'pricing'
+                ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
+                : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+            }`}
+          >
+            <Tag className="w-4 h-4" />
+            <span>Pricing &amp; Coupons</span>
           </button>
         </div>
 
@@ -1145,9 +1327,533 @@ function MasterDashboardContent() {
             )}
           </div>
         </div>
-      )}
+      {/* ── Pricing & Coupons Management Tab ─────────────────────────── */}
+      {activeTab === 'pricing' && (
+        <div className="space-y-8 animate-in fade-in duration-200">
+          {/* Notification Toast */}
+          {pricingNotice && (
+            <div className="flex items-center gap-3 p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-400 text-sm font-semibold">
+              <CheckCircle2 className="w-5 h-5 flex-shrink-0" />
+              <span>{pricingNotice}</span>
+              <button
+                onClick={() => setPricingNotice(null)}
+                className="ml-auto text-xs opacity-75 hover:opacity-100"
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
 
-      {/* ── Create Organization Modal ──────────────────────────────────── */}
+          {/* Section 1: Plan Pricing & Seat Fees */}
+          <div className="space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[var(--border)] pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-purple-600/15 text-purple-600 dark:text-purple-400 flex items-center justify-center font-bold">
+                  <Sliders className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="text-base sm:text-lg font-extrabold text-[var(--text-primary)]">
+                    SaaS Plan Base Pricing &amp; Seat Add-on Rates
+                  </h2>
+                  <p className="text-xs text-[var(--text-muted)]">
+                    Configure monthly and annual amounts for each tier. Changes update live across the checkout flow.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => fetchPricingAndCoupons()}
+                disabled={loadingPricing}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[var(--border)] text-xs font-semibold hover:bg-[var(--bg-elevated)] transition-colors self-start sm:self-auto"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${loadingPricing ? 'animate-spin' : ''}`} />
+                <span>Refresh Rates</span>
+              </button>
+            </div>
+
+            {loadingPricing && pricingPlans.length === 0 ? (
+              <div className="p-12 text-center text-sm text-[var(--text-muted)] flex flex-col items-center justify-center gap-3">
+                <Loader2 className="w-6 h-6 animate-spin text-indigo-500" />
+                <span>Loading pricing configuration...</span>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {pricingPlans.map((plan) => {
+                  const isPro = plan.plan_id === 'pro';
+                  const isEnterprise = plan.plan_id === 'enterprise';
+                  const isSaving = savingPlanId === plan.plan_id;
+
+                  return (
+                    <div
+                      key={plan.id}
+                      className={`relative rounded-2xl border bg-[var(--bg-card)] p-5 shadow-sm space-y-4 flex flex-col justify-between transition-all ${
+                        isPro
+                          ? 'border-indigo-500 ring-2 ring-indigo-500/20 shadow-indigo-500/5'
+                          : 'border-[var(--border)]'
+                      }`}
+                    >
+                      {isPro && (
+                        <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full bg-gradient-to-r from-indigo-600 to-purple-600 text-[10px] font-extrabold uppercase tracking-wider text-white shadow-md">
+                          Most Popular
+                        </div>
+                      )}
+
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <span className="text-xs uppercase font-extrabold tracking-wider text-indigo-500">
+                              Tier {plan.plan_id.toUpperCase()}
+                            </span>
+                            <h3 className="text-lg font-black text-[var(--text-primary)]">
+                              {plan.plan_name}
+                            </h3>
+                          </div>
+                          <div
+                            className={`w-9 h-9 rounded-xl flex items-center justify-center font-black ${
+                              isEnterprise
+                                ? 'bg-emerald-500/10 text-emerald-600'
+                                : isPro
+                                ? 'bg-indigo-500/10 text-indigo-600'
+                                : 'bg-blue-500/10 text-blue-600'
+                            }`}
+                          >
+                            <DollarSign className="w-5 h-5" />
+                          </div>
+                        </div>
+
+                        {/* Base Employees */}
+                        <div>
+                          <label className="text-[11px] font-bold text-[var(--text-muted)] uppercase tracking-wider">
+                            Base Employees Included
+                          </label>
+                          <div className="relative mt-1">
+                            <input
+                              type="number"
+                              value={plan.base_employees}
+                              onChange={(e) =>
+                                updatePlanField(plan.plan_id, 'base_employees', Number(e.target.value))
+                              }
+                              className="w-full px-3 py-2 rounded-xl bg-[var(--bg-surface)] border border-[var(--border)] text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            />
+                            <span className="absolute right-3 top-2.5 text-xs text-[var(--text-muted)]">
+                              seats
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Monthly Base Price */}
+                        <div>
+                          <label className="text-[11px] font-bold text-[var(--text-muted)] uppercase tracking-wider">
+                            Monthly Base Price
+                          </label>
+                          <div className="relative mt-1">
+                            <span className="absolute left-3 top-2.5 text-xs text-[var(--text-muted)] font-bold">
+                              ₹
+                            </span>
+                            <input
+                              type="number"
+                              value={plan.monthly_base_price}
+                              onChange={(e) =>
+                                updatePlanField(plan.plan_id, 'monthly_base_price', Number(e.target.value))
+                              }
+                              className="w-full pl-7 pr-12 py-2 rounded-xl bg-[var(--bg-surface)] border border-[var(--border)] text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            />
+                            <span className="absolute right-3 top-2.5 text-xs text-[var(--text-muted)]">
+                              /mo
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Annual Base Price */}
+                        <div>
+                          <label className="text-[11px] font-bold text-[var(--text-muted)] uppercase tracking-wider">
+                            Annual Base Price (Monthly Equivalent)
+                          </label>
+                          <div className="relative mt-1">
+                            <span className="absolute left-3 top-2.5 text-xs text-[var(--text-muted)] font-bold">
+                              ₹
+                            </span>
+                            <input
+                              type="number"
+                              value={plan.annual_base_price}
+                              onChange={(e) =>
+                                updatePlanField(plan.plan_id, 'annual_base_price', Number(e.target.value))
+                              }
+                              className="w-full pl-7 pr-12 py-2 rounded-xl bg-[var(--bg-surface)] border border-[var(--border)] text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            />
+                            <span className="absolute right-3 top-2.5 text-xs text-[var(--text-muted)]">
+                              /mo
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Annual Discount % */}
+                        <div>
+                          <label className="text-[11px] font-bold text-[var(--text-muted)] uppercase tracking-wider">
+                            Annual Prepay Discount (%)
+                          </label>
+                          <div className="relative mt-1">
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              value={plan.annual_discount_percent}
+                              onChange={(e) =>
+                                updatePlanField(plan.plan_id, 'annual_discount_percent', Number(e.target.value))
+                              }
+                              className="w-full px-3 py-2 rounded-xl bg-[var(--bg-surface)] border border-[var(--border)] text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            />
+                            <span className="absolute right-3 top-2.5 text-xs text-[var(--text-muted)] font-bold">
+                              % OFF
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Extra Per-Employee Monthly */}
+                        <div className="grid grid-cols-2 gap-2 pt-2 border-t border-[var(--border)]">
+                          <div>
+                            <label className="text-[10px] font-bold text-[var(--text-muted)] uppercase">
+                              Extra Seat (Monthly)
+                            </label>
+                            <div className="relative mt-1">
+                              <span className="absolute left-2.5 top-2 text-[11px] text-[var(--text-muted)] font-bold">
+                                ₹
+                              </span>
+                              <input
+                                type="number"
+                                value={plan.monthly_extra_per_emp}
+                                onChange={(e) =>
+                                  updatePlanField(
+                                    plan.plan_id,
+                                    'monthly_extra_per_emp',
+                                    Number(e.target.value)
+                                  )
+                                }
+                                className="w-full pl-6 pr-2 py-1.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border)] text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                              />
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="text-[10px] font-bold text-[var(--text-muted)] uppercase">
+                              Extra Seat (Annual)
+                            </label>
+                            <div className="relative mt-1">
+                              <span className="absolute left-2.5 top-2 text-[11px] text-[var(--text-muted)] font-bold">
+                                ₹
+                              </span>
+                              <input
+                                type="number"
+                                value={plan.annual_extra_per_emp}
+                                onChange={(e) =>
+                                  updatePlanField(
+                                    plan.plan_id,
+                                    'annual_extra_per_emp',
+                                    Number(e.target.value)
+                                  )
+                                }
+                                className="w-full pl-6 pr-2 py-1.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border)] text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Save Button */}
+                      <button
+                        onClick={() => handleSavePlan(plan)}
+                        disabled={isSaving}
+                        className="w-full mt-4 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md shadow-indigo-600/20 transition-all disabled:opacity-50"
+                      >
+                        {isSaving ? (
+                          <>
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            <span>Updating Pricing...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Save className="w-3.5 h-3.5" />
+                            <span>Save {plan.plan_name} Pricing</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Section 2: Coupon & Promo Codes Engine */}
+          <div className="space-y-6 pt-4 border-t border-[var(--border)]">
+            <div className="border-b border-[var(--border)] pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-emerald-600/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold">
+                  <Ticket className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="text-base sm:text-lg font-extrabold text-[var(--text-primary)]">
+                    Coupons &amp; Promotional Codes Engine
+                  </h2>
+                  <p className="text-xs text-[var(--text-muted)]">
+                    Launch marketing campaigns, percentage discounts, flat fee deductions, and track redemption metrics.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Create Coupon Form Card */}
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-5 shadow-sm space-y-4">
+              <div className="flex items-center gap-2">
+                <Tag className="w-4 h-4 text-emerald-500" />
+                <h3 className="font-bold text-sm text-[var(--text-primary)]">
+                  Create New Promotional Discount Code
+                </h3>
+              </div>
+
+              {couponFormError && (
+                <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-xs font-semibold">
+                  {couponFormError}
+                </div>
+              )}
+
+              <form onSubmit={handleCreateCoupon} className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {/* Coupon Code */}
+                  <div>
+                    <label className="text-[11px] font-bold text-[var(--text-muted)] uppercase tracking-wider">
+                      Promo Code *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. LAUNCH50"
+                      value={couponCode}
+                      onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                      className="mt-1 w-full px-3 py-2 rounded-xl bg-[var(--bg-surface)] border border-[var(--border)] text-sm font-mono font-bold tracking-wider uppercase focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                  </div>
+
+                  {/* Discount Type */}
+                  <div>
+                    <label className="text-[11px] font-bold text-[var(--text-muted)] uppercase tracking-wider">
+                      Discount Type *
+                    </label>
+                    <select
+                      value={couponType}
+                      onChange={(e) => setCouponType(e.target.value as 'percentage' | 'fixed')}
+                      className="mt-1 w-full px-3 py-2 rounded-xl bg-[var(--bg-surface)] border border-[var(--border)] text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    >
+                      <option value="percentage">Percentage (%) Discount</option>
+                      <option value="fixed">Fixed Flat INR (₹) Off</option>
+                    </select>
+                  </div>
+
+                  {/* Discount Value */}
+                  <div>
+                    <label className="text-[11px] font-bold text-[var(--text-muted)] uppercase tracking-wider">
+                      Discount Value * {couponType === 'percentage' ? '(%)' : '(₹)'}
+                    </label>
+                    <div className="relative mt-1">
+                      <input
+                        type="number"
+                        required
+                        min="1"
+                        value={couponValue}
+                        onChange={(e) => setCouponValue(Number(e.target.value))}
+                        className="w-full px-3 py-2 rounded-xl bg-[var(--bg-surface)] border border-[var(--border)] text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      />
+                      <span className="absolute right-3 top-2.5 text-xs text-[var(--text-muted)] font-bold">
+                        {couponType === 'percentage' ? '%' : '₹'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Min Order Value */}
+                  <div>
+                    <label className="text-[11px] font-bold text-[var(--text-muted)] uppercase tracking-wider">
+                      Min Order Amount (₹)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={couponMinOrder}
+                      onChange={(e) => setCouponMinOrder(Number(e.target.value))}
+                      className="mt-1 w-full px-3 py-2 rounded-xl bg-[var(--bg-surface)] border border-[var(--border)] text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                  </div>
+
+                  {/* Max Discount Cap (for percentage) */}
+                  <div>
+                    <label className="text-[11px] font-bold text-[var(--text-muted)] uppercase tracking-wider">
+                      Max Discount Cap (₹)
+                    </label>
+                    <input
+                      type="number"
+                      placeholder="e.g. 2000 (Optional)"
+                      value={couponMaxCap}
+                      onChange={(e) => setCouponMaxCap(e.target.value)}
+                      className="mt-1 w-full px-3 py-2 rounded-xl bg-[var(--bg-surface)] border border-[var(--border)] text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                  </div>
+
+                  {/* Max Uses */}
+                  <div>
+                    <label className="text-[11px] font-bold text-[var(--text-muted)] uppercase tracking-wider">
+                      Max Redemptions
+                    </label>
+                    <input
+                      type="number"
+                      placeholder="Unlimited if blank"
+                      value={couponMaxUses}
+                      onChange={(e) => setCouponMaxUses(e.target.value)}
+                      className="mt-1 w-full px-3 py-2 rounded-xl bg-[var(--bg-surface)] border border-[var(--border)] text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                  </div>
+
+                  {/* Valid Until */}
+                  <div>
+                    <label className="text-[11px] font-bold text-[var(--text-muted)] uppercase tracking-wider">
+                      Valid Until Date
+                    </label>
+                    <input
+                      type="date"
+                      value={couponValidUntil}
+                      onChange={(e) => setCouponValidUntil(e.target.value)}
+                      className="mt-1 w-full px-3 py-2 rounded-xl bg-[var(--bg-surface)] border border-[var(--border)] text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                  </div>
+
+                  {/* Submit Button */}
+                  <div className="flex items-end">
+                    <button
+                      type="submit"
+                      disabled={creatingCoupon}
+                      className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md shadow-emerald-600/20 transition-all disabled:opacity-50"
+                    >
+                      {creatingCoupon ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <span>Creating...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Plus className="w-4 h-4" />
+                          <span>Publish Promo Code</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </form>
+            </div>
+
+            {/* Coupons Ledger Table */}
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] overflow-hidden shadow-sm">
+              <div className="p-4 border-b border-[var(--border)] flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <h3 className="font-bold text-sm text-[var(--text-primary)]">
+                    Active &amp; Historical Coupons ({coupons.length})
+                  </h3>
+                </div>
+              </div>
+
+              {coupons.length === 0 ? (
+                <div className="p-10 text-center text-sm text-[var(--text-muted)]">
+                  No coupons found. Create your first campaign code above!
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-[var(--bg-surface)] border-b border-[var(--border)] text-[11px] font-bold text-[var(--text-muted)] uppercase tracking-wider">
+                      <tr>
+                        <th className="py-3 px-4">Coupon Code</th>
+                        <th className="py-3 px-4">Discount</th>
+                        <th className="py-3 px-4">Min Order</th>
+                        <th className="py-3 px-4">Redemptions</th>
+                        <th className="py-3 px-4">Valid Until</th>
+                        <th className="py-3 px-4">Status</th>
+                        <th className="py-3 px-4 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[var(--border)] font-medium">
+                      {coupons.map((c) => (
+                        <tr key={c.id} className="hover:bg-[var(--bg-surface)]/50 transition-colors">
+                          <td className="py-3 px-4">
+                            <span className="font-mono font-black text-xs px-2.5 py-1 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                              {c.code}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4">
+                            <span className="font-bold text-[var(--text-primary)]">
+                              {c.discount_type === 'percentage'
+                                ? `${c.discount_value}% OFF`
+                                : `₹${c.discount_value} OFF`}
+                            </span>
+                            {c.max_discount_cap && (
+                              <span className="block text-[10px] text-[var(--text-muted)]">
+                                Max cap: ₹{c.max_discount_cap}
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 text-[var(--text-muted)]">
+                            ₹{c.min_order_amount.toLocaleString()}
+                          </td>
+                          <td className="py-3 px-4">
+                            <span className="font-bold text-[var(--text-primary)]">
+                              {c.times_redeemed}
+                            </span>
+                            <span className="text-[var(--text-muted)]">
+                              {' '}
+                              / {c.max_redemptions ? c.max_redemptions : '∞'}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-[var(--text-muted)]">
+                            {c.valid_until
+                              ? new Date(c.valid_until).toLocaleDateString()
+                              : 'No expiry'}
+                          </td>
+                          <td className="py-3 px-4">
+                            {c.is_active ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25">
+                                Active
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-zinc-500/15 text-zinc-500 border border-zinc-500/25">
+                                Inactive
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                onClick={() => handleToggleCoupon(c.id, c.is_active)}
+                                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-colors ${
+                                  c.is_active
+                                    ? 'border-amber-500/30 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10'
+                                    : 'border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10'
+                                }`}
+                              >
+                                {c.is_active ? 'Disable' : 'Enable'}
+                              </button>
+                              <button
+                                onClick={() => handleDeleteCoupon(c.id)}
+                                className="p-1 rounded-lg text-rose-500 hover:bg-rose-500/10 transition-colors"
+                                title="Delete Coupon"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
       {showCreateModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
           <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl max-w-md w-full p-6 shadow-2xl relative space-y-5">

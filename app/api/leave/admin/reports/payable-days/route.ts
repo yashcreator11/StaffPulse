@@ -3,6 +3,8 @@ import { createLeaveClient } from '@/lib/leaveSupabase/server';
 import { getCurrentEmployee } from '@/lib/leaveSupabase/getCurrentEmployee';
 import { getLwpDaysForEmployees } from '@/lib/leaveSupabase/lwpDayCount';
 
+import { canAccessFeature, normalizePlanTier } from '@/lib/billing/planGating';
+
 const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December'
@@ -32,6 +34,19 @@ async function handleReport(req: NextRequest) {
   const requester = await getCurrentEmployee();
   if (!requester || (requester.role !== 'hr' && requester.role !== 'hr_super_admin')) {
     return NextResponse.json({ error: 'Not authorized' }, { status: 403 });
+  }
+
+  // Enterprise Plan Gating
+  const userPlan = normalizePlanTier(requester.organizations?.plan);
+  if (!canAccessFeature(userPlan, 'payable_days')) {
+    return NextResponse.json(
+      {
+        error: 'Payable Days Payroll Deduction Export is an Enterprise-tier feature.',
+        planLocked: true,
+        requiredTier: 'enterprise',
+      },
+      { status: 403 }
+    );
   }
 
   let year: number;

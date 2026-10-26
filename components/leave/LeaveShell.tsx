@@ -26,15 +26,20 @@ import {
   CreditCard,
   ShieldCheck,
   Fingerprint,
+  Sparkles,
 } from 'lucide-react';
 import LeaveThemeSync from './LeaveThemeSync';
 import NotificationBell from './NotificationBell';
 import ApplyLeaveDrawer from './ApplyLeaveDrawer';
 import WfhApplyDrawer from './WfhApplyDrawer';
+import InteractiveProductTour from '@/components/onboarding/InteractiveProductTour';
 import type { ApplySubmitResult, ApplyLeaveInitialValues } from './ApplyLeaveForm';
 import type { WfhSubmitResult, WfhApplyInitialValues } from './WfhApplyForm';
+import { createClient } from '@/lib/supabase/client';
 
 export type LeaveRole = 'employee' | 'lead' | 'manager' | 'hr' | 'hr_super_admin';
+
+import { canAccessFeature, normalizePlanTier } from '@/lib/billing/planGating';
 
 type NavItem = {
   href: string;
@@ -42,6 +47,7 @@ type NavItem = {
   icon: React.ComponentType<{ size?: number; className?: string }>;
   exact?: boolean;
   badge?: number;
+  planBadge?: string;
 };
 
 type NavGroup = { label: string; items: NavItem[] };
@@ -51,17 +57,24 @@ type NavGroup = { label: string; items: NavItem[] };
 // signed-in employee's role — so the set of tabs, their order, their
 // icons, and the active-state logic are identical no matter which page
 // of the feature you're actually looking at.
-function navGroups(role: LeaveRole, pendingApprovalsCount: number): NavGroup[] {
+function navGroups(role: LeaveRole, pendingApprovalsCount: number, rawPlan?: string): NavGroup[] {
   const isApprover = role === 'manager' || role === 'lead';
   const isHr = role === 'hr' || role === 'hr_super_admin';
   const showPersonal = role !== 'hr_super_admin';
+  const plan = normalizePlanTier(rawPlan);
 
   const groups: NavGroup[] = [];
   if (showPersonal) {
     groups.push({
       label: 'Personal',
       items: [
-        { href: '/leave/me', label: 'My Leave', icon: Wallet, exact: true },
+        {
+          href: '/leave/me',
+          label: 'My Leave',
+          icon: Wallet,
+          exact: true,
+          planBadge: plan === 'starter' ? 'Pro' : undefined,
+        },
         { href: '/leave/attendance', label: 'Attendance', icon: CalendarClock },
       ],
     });
@@ -83,14 +96,25 @@ function navGroups(role: LeaveRole, pendingApprovalsCount: number): NavGroup[] {
       items: [
         { href: '/leave/admin', label: 'Leave Balances', icon: LayoutGrid, exact: true },
         { href: '/leave/admin/history', label: 'Leave Tracker', icon: CalendarDays },
-        { href: '/leave/admin/reports/payable-days', label: 'Payable Days', icon: FileSpreadsheet },
+        {
+          href: '/leave/admin/reports/payable-days',
+          label: 'Payable Days',
+          icon: FileSpreadsheet,
+          planBadge: plan !== 'enterprise' ? 'Ent' : undefined,
+        },
+        { href: '/leave/admin/devices', label: 'Biometric Machines', icon: Fingerprint },
         { href: '/leave/approvals', label: 'Approvals', icon: ClipboardCheck, badge: pendingApprovalsCount },
         { href: '/leave/admin/analytics', label: 'Analytics', icon: BarChart3 },
         { href: '/leave/admin/violations', label: 'Violations', icon: ShieldAlert },
         { href: '/leave/admin/organization', label: 'Organization', icon: Building2 },
         { href: '/leave/admin/config', label: 'Leave Configuration', icon: Settings },
         { href: '/leave/admin/billing', label: 'Billing & Plans', icon: CreditCard },
-        { href: '/leave/admin/compliance', label: 'Compliance & DPDP', icon: ShieldCheck },
+        {
+          href: '/leave/admin/compliance',
+          label: 'Compliance & DPDP',
+          icon: ShieldCheck,
+          planBadge: plan !== 'enterprise' ? 'Ent' : undefined,
+        },
       ],
     });
   }
@@ -126,16 +150,25 @@ function NavLink({ item, pathname, collapsed }: { item: NavItem; pathname: strin
         <Icon size={16} className={active ? 'text-white' : 'text-[var(--text-muted)]'} />
         {!collapsed && item.label}
       </span>
-      {!!item.badge && !collapsed && (
-        <span
-          className={`inline-flex min-w-[1.25rem] h-5 items-center justify-center rounded-full px-1.5 text-[10px] font-bold ${
-            active ? 'bg-white/30 text-white' : 'bg-amber-500 text-white shadow-sm'
-          }`}
-        >
-          {item.badge}
-        </span>
-      )}
+      <div className="flex items-center gap-1.5">
+        {item.planBadge && !collapsed && (
+          <span className="inline-flex items-center gap-0.5 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+            <Lock size={9} />
+            {item.planBadge}
+          </span>
+        )}
+        {!!item.badge && !collapsed && (
+          <span
+            className={`inline-flex min-w-[1.25rem] h-5 items-center justify-center rounded-full px-1.5 text-[10px] font-bold ${
+              active ? 'bg-white/30 text-white' : 'bg-amber-500 text-white shadow-sm'
+            }`}
+          >
+            {item.badge}
+          </span>
+        )}
+      </div>
       {!!item.badge && collapsed && <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-amber-500 shadow" />}
+      {item.planBadge && collapsed && <span className="absolute bottom-1.5 right-1.5 w-2 h-2 rounded-full bg-amber-500/80 shadow" />}
     </Link>
   );
 }
@@ -152,16 +185,22 @@ export default function LeaveShell({
   employeeName,
   role,
   pendingApprovalsCount = 0,
+  orgId,
+  plan = 'enterprise',
+  isDemo = false,
   children,
 }: {
   employeeName: string;
   role: LeaveRole;
   pendingApprovalsCount?: number;
+  orgId?: string;
+  plan?: string;
+  isDemo?: boolean;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const groups = navGroups(role, pendingApprovalsCount);
+  const groups = navGroups(role, pendingApprovalsCount, plan);
   const flatItems = groups.flatMap((g) => g.items);
   const canReturnToDashboard = role !== 'employee';
   // hr_super_admin has no personal leave/WFH of their own — same
@@ -178,6 +217,7 @@ export default function LeaveShell({
   const [applyLeavePrefill, setApplyLeavePrefill] = useState<ApplyLeaveInitialValues | undefined>(undefined);
   const [applyWfhOpen, setApplyWfhOpen] = useState(false);
   const [applyWfhPrefill, setApplyWfhPrefill] = useState<WfhApplyInitialValues | undefined>(undefined);
+  const [tourOpen, setTourOpen] = useState(false);
 
   // "Apply" and "Reapply" flows dispatch these custom events
   useEffect(() => {
@@ -248,10 +288,18 @@ export default function LeaveShell({
     return () => document.removeEventListener('mousedown', onClickAway);
   }, []);
 
-  async function handleSignOut() {
+  async function handleExitDemo() {
+    const supabase = createClient();
+    await supabase.auth.signOut();
     await fetch('/api/auth/signout', { method: 'POST' });
-    router.replace('/login');
-    router.refresh();
+    window.location.href = '/';
+  }
+
+  async function handleSignOut() {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    await fetch('/api/auth/signout', { method: 'POST' });
+    window.location.href = isDemo ? '/' : '/login';
   }
 
   const UserMenu = (
@@ -290,12 +338,33 @@ export default function LeaveShell({
           </Link>
           <button
             type="button"
+            onClick={() => {
+              setMenuOpen(false);
+              setTourOpen(true);
+            }}
+            className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-[var(--text-primary)] hover:bg-[var(--bg-elevated)] transition-colors"
+          >
+            <Sparkles size={14} className="text-amber-500" />
+            Product Tour
+          </button>
+          <button
+            type="button"
             onClick={handleSignOut}
             className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-red-500 dark:text-red-400 hover:bg-red-500/10 transition-colors"
           >
             <LogOut size={14} />
             Sign Out
           </button>
+          {isDemo && (
+            <button
+              type="button"
+              onClick={handleExitDemo}
+              className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-semibold text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 transition-colors border-t border-[var(--border)] mt-1 pt-2"
+            >
+              <Home size={14} />
+              Exit Demo (Back to Home)
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -325,17 +394,49 @@ export default function LeaveShell({
               </div>
             )}
           </div>
-          {canReturnToDashboard && (
+          {canReturnToDashboard ? (
             <Link
               href="/"
-              title={collapsed ? 'Dashboard' : undefined}
-              className={`mt-4 flex items-center gap-1.5 rounded-xl border border-[var(--border)] text-xs font-medium text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:border-[var(--accent)]/40 hover:bg-[var(--accent)]/5 transition-all ${
+              title={collapsed ? 'Attendance Dashboard' : undefined}
+              className={`mt-4 flex items-center gap-1.5 rounded-xl border border-[var(--border)] text-xs font-semibold text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:border-[var(--accent)]/40 hover:bg-[var(--accent)]/5 transition-all ${
                 collapsed ? 'justify-center w-full py-2' : 'px-3 py-1.5'
               }`}
             >
               <ArrowLeft size={12} />
-              {!collapsed && 'Dashboard'}
+              {!collapsed && 'Attendance Dashboard'}
             </Link>
+          ) : (
+            <Link
+              href="/leave/attendance"
+              title={collapsed ? 'My Attendance' : undefined}
+              className={`mt-4 flex items-center gap-1.5 rounded-xl border border-[var(--border)] text-xs font-semibold text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:border-[var(--accent)]/40 hover:bg-[var(--accent)]/5 transition-all ${
+                collapsed ? 'justify-center w-full py-2' : 'px-3 py-1.5'
+              }`}
+            >
+              <ArrowLeft size={12} />
+              {!collapsed && 'My Attendance'}
+            </Link>
+          )}
+          {isDemo && (
+            <div className={`mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 ${collapsed ? 'p-1.5 text-center' : 'p-2.5'}`}>
+              {!collapsed && (
+                <div className="flex items-center gap-1.5 text-[10px] font-bold text-amber-700 dark:text-amber-400 mb-1.5">
+                  <Sparkles size={12} className="text-amber-500" />
+                  <span>Demo Sandbox</span>
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={handleExitDemo}
+                title={collapsed ? 'Exit Demo & Return to Home' : undefined}
+                className={`w-full flex items-center justify-center gap-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-bold text-[11px] transition-colors shadow-sm ${
+                  collapsed ? 'h-8 px-0' : 'py-1.5 px-2'
+                }`}
+              >
+                <Home size={13} />
+                {!collapsed && <span>Exit to Home</span>}
+              </button>
+            </div>
           )}
         </div>
 
@@ -447,15 +548,14 @@ export default function LeaveShell({
       <div className="md:hidden sticky top-0 z-30 border-b border-[var(--border)]" style={{ background: 'var(--bg-card)', backdropFilter: 'blur(16px)' }}>
         <div className="flex items-center justify-between gap-3 px-4 h-14">
           <div className="flex items-center gap-2.5 min-w-0">
-            {canReturnToDashboard && (
-              <Link
-                href="/"
-                aria-label="Back to Dashboard"
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:border-[var(--accent)]/40 transition-all"
-              >
-                <ArrowLeft size={14} />
-              </Link>
-            )}
+            <Link
+              href={role === 'employee' ? '/leave/attendance' : '/'}
+              aria-label="Back to Dashboard"
+              title={role === 'employee' ? 'My Attendance' : 'Attendance Dashboard'}
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:border-[var(--accent)]/40 transition-all"
+            >
+              <ArrowLeft size={14} />
+            </Link>
             <div className="flex items-center gap-2">
               <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-gradient-to-br from-[var(--accent)] to-[var(--accent-hover)] text-white">
                 <Fingerprint size={12} />
@@ -519,6 +619,16 @@ export default function LeaveShell({
                     <LogOut size={14} />
                     Sign Out
                   </button>
+                  {isDemo && (
+                    <button
+                      type="button"
+                      onClick={handleExitDemo}
+                      className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-semibold text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 transition-colors border-t border-[var(--border)] mt-1 pt-2"
+                    >
+                      <Home size={14} />
+                      Exit Demo (Back to Home)
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -557,7 +667,42 @@ export default function LeaveShell({
 
       {/* ────────── Page content ────────────────────────────────────── */}
       <main className="scroll-thin flex-1 min-w-0 md:h-screen md:min-h-0 md:overflow-y-auto">
-        <div className="mx-auto max-w-[1400px] px-4 sm:px-6 lg:px-10 py-6 sm:py-8">{children}</div>
+        <div className="mx-auto max-w-[1400px] px-4 sm:px-6 lg:px-10 py-6 sm:py-8">
+          {isDemo && (
+            <div className="bg-gradient-to-r from-amber-500/20 via-orange-500/15 to-amber-500/20 border-2 border-amber-500/40 rounded-2xl p-4 mb-6 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-lg">
+              <div className="flex items-center gap-3">
+                <span className="p-2.5 rounded-xl bg-amber-500 text-white font-bold flex items-center justify-center shadow">
+                  <Sparkles className="w-5 h-5" />
+                </span>
+                <div>
+                  <div className="text-xs sm:text-sm font-extrabold text-amber-700 dark:text-amber-400">
+                    ⚡ Interactive Free Trial Sandbox Mode ({plan.toUpperCase()})
+                  </div>
+                  <p className="text-[11px] text-[var(--text-muted)]">
+                    You are exploring pre-loaded sample employee records. Actions in sandbox mode will not alter live payroll.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={handleExitDemo}
+                  className="px-3.5 py-2 rounded-xl border border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 text-amber-900 dark:text-amber-200 font-bold text-xs transition-colors flex items-center gap-1.5 shadow-sm"
+                >
+                  <Home className="w-3.5 h-3.5" />
+                  <span>Exit Demo &amp; Return Home</span>
+                </button>
+                <Link
+                  href="/signup"
+                  className="px-4 py-2 rounded-xl bg-[var(--accent)] text-white font-bold text-xs hover:opacity-90 transition-opacity flex-shrink-0 shadow-md"
+                >
+                  Upgrade to Live Plan →
+                </Link>
+              </div>
+            </div>
+          )}
+          {children}
+        </div>
       </main>
 
       {applyLeaveOpen && (
@@ -566,6 +711,11 @@ export default function LeaveShell({
       {applyWfhOpen && (
         <WfhApplyDrawer onClose={closeApplyWfh} onSuccess={handleApplyWfhSuccess} initialValues={applyWfhPrefill} />
       )}
+      <InteractiveProductTour
+        orgId={orgId || 'default_org'}
+        forceOpen={tourOpen}
+        onClose={() => setTourOpen(false)}
+      />
     </div>
   );
 }

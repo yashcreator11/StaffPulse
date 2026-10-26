@@ -178,6 +178,8 @@ export default function LeaveConfigPage() {
       <LeavePageHeader
         title="Leave Configuration"
         description="Policy rules that used to be hardcoded — now editable here."
+        backHref="/leave/admin"
+        backLabel="Back to Leave Balances"
       />
 
       {error && (

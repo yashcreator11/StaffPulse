@@ -41,20 +41,51 @@ export async function POST(req: NextRequest) {
   // Map to plan code
   const planCode = quote.planId === 'enterprise' ? 'plan3' : quote.planId === 'pro' ? 'plan2' : 'plan1';
 
-  // 1. Update organization plan & subscription status
+  // 1. Update organization plan & subscription status to active
   await supabase
     .from('organizations')
     .update({
       plan: planCode,
+      status: 'active',
       subscription_status: 'active',
       seat_limit: quote.enrolledStaff,
       updated_at: new Date().toISOString(),
     })
     .eq('id', orgId);
 
-  // 2. Generate Invoice record
+  // Update subscriptions record to active
+  await supabase
+    .from('subscriptions')
+    .upsert({
+      org_id: orgId,
+      plan_tier: quote.planId,
+      billing_cycle: quote.cadence,
+      seat_limit: quote.enrolledStaff,
+      status: 'active',
+      current_period_start: new Date().toISOString(),
+      current_period_end: new Date(Date.now() + (quote.cadence === 'annual' ? 365 : 30) * 86400000).toISOString(),
+      tax_id: gstin || null,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'org_id' });
+
+  // 2. Compute Subtotal & Check for Coupons
+  let subtotal = quote.billingCycleTotal;
+  let couponDiscount = 0;
+  let appliedCouponCode: string | null = null;
+
+  if (body.couponCode) {
+    const { validateCoupon, incrementCouponUsage } = await import('@/lib/billing/couponService');
+    const couponRes = await validateCoupon(String(body.couponCode), quote.planId, subtotal);
+    if (couponRes.valid && couponRes.coupon) {
+      couponDiscount = couponRes.coupon.discountAmount;
+      subtotal = couponRes.coupon.finalSubtotal;
+      appliedCouponCode = couponRes.coupon.code;
+      await incrementCouponUsage(appliedCouponCode);
+    }
+  }
+
+  // 3. Generate Invoice record
   const invoiceNumber = `INV-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
-  const subtotal = quote.billingCycleTotal;
   const gstAmount = Math.round(subtotal * 0.18);
   const totalAmount = subtotal + gstAmount;
 
@@ -72,7 +103,10 @@ export async function POST(req: NextRequest) {
       metadata: {
         payment_id: razorpayPaymentId,
         order_id: razorpayOrderId,
-        subtotal,
+        original_subtotal: quote.billingCycleTotal,
+        coupon_code: appliedCouponCode,
+        coupon_discount: couponDiscount,
+        taxable_subtotal: subtotal,
         gst_rate: '18%',
         gst_amount: gstAmount,
         sac_code: '998313',

@@ -123,6 +123,8 @@ export default async function LeaveAdminHome() {
       <LeavePageHeader
         title={`Leave Balances — ${formatFYLabel(fyStartYear)}`}
         description={employee?.email ? `Signed in as ${employee.email}` : undefined}
+        backHref="/"
+        backLabel="Back to Attendance Dashboard"
         actions={
           <>
             <BulkMarkAttendanceButton />

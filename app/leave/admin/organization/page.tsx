@@ -197,6 +197,8 @@ export default function OrganizationManagementPage() {
         <LeavePageHeader
           title="Organization Management"
           description="Who reports to whom, and who runs each department — set it here, see it reflected everywhere."
+          backHref="/leave/admin"
+          backLabel="Back to Leave Balances"
         />
         {refreshing && (
           <span className="flex items-center gap-1.5 text-xs pt-1 shrink-0" style={{ color: 'var(--text-muted)' }}>

@@ -4,7 +4,9 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter, useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import { CheckCircle, Calendar, X as XIcon, Info } from 'lucide-react';
+import { CheckCircle, Calendar, X as XIcon, Info, Sparkles, Lock, Home } from 'lucide-react';
+import { createClient } from '@/lib/supabase/client';
+import { isDemoEmail } from '@/lib/isDemoSandbox';
 import {
   AttendanceRecord,
   ColumnMapping,
@@ -126,9 +128,18 @@ export default function HRDashboard() {
   const [dateFrom, setDateFrom] = useState<string | null>(null);
   const [dateTo, setDateTo] = useState<string | null>(null);
 
-  // Shared drill state: when DeptAttendanceChart drills to a dept,
-  // DeptProductivityChart follows
   const [deptDrillSync, setDeptDrillSync] = useState<string | null>(null);
+  const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
+  const [showDemoUpgradeModal, setShowDemoUpgradeModal] = useState(false);
+
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data }) => {
+      if (data?.user?.email) setCurrentUserEmail(data.user.email);
+    });
+  }, []);
+
+  const isDemo = isDemoEmail(currentUserEmail);
 
   const latestDataUpdated = useMemo(() => {
     if (!uploadedMonths || uploadedMonths.length === 0) return null;
@@ -328,10 +339,18 @@ export default function HRDashboard() {
     router.replace(qs ? `?${qs}` : '/', { scroll: false });
   }, [router]);
 
-  async function handleSignOut() {
+  async function handleExitDemo() {
+    const supabase = createClient();
+    await supabase.auth.signOut();
     await fetch('/api/auth/signout', { method: 'POST' });
-    router.replace('/login');
-    router.refresh();
+    window.location.href = '/';
+  }
+
+  async function handleSignOut() {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    await fetch('/api/auth/signout', { method: 'POST' });
+    window.location.href = isDemo ? '/' : '/login';
   }
 
   function showToast(type: Toast['type'], message: string) {
@@ -340,6 +359,10 @@ export default function HRDashboard() {
   }
 
   async function handleFiles(files: File[]) {
+    if (isDemo) {
+      setShowDemoUpgradeModal(true);
+      return;
+    }
     const valid: PendingFile[] = [];
     const skipped: { name: string; reason: string }[] = [];
 
@@ -775,11 +798,13 @@ export default function HRDashboard() {
     <DashboardShell
       variant="hr"
       availableSections={availableSections}
+      isDemo={isDemo}
+      onExitDemo={handleExitDemo}
       onSignOut={handleSignOut}
       holidayCount={holidays.length}
       onOpenHolidays={hasDashboardData && (holidays.length > 0 || !!currentOffice) ? () => setShowHolidayModal(true) : undefined}
       onOpenSettings={hasDashboardData ? () => setShowSettings(true) : undefined}
-      onUpload={hasDashboardData ? () => setAppState('upload') : undefined}
+      onUpload={hasDashboardData ? () => (isDemo ? setShowDemoUpgradeModal(true) : setAppState('upload')) : undefined}
       exportSlot={hasDashboardData ? <ExportPanel uploadedMonths={uploadedMonths} thresholds={thresholds} /> : undefined}
     >
       {toast && (
@@ -791,6 +816,41 @@ export default function HRDashboard() {
       )}
 
       <div>
+        {/* ── Demo Sandbox Mode Top Alert Strip ─────────────────────── */}
+        {isDemo && (
+          <div className="bg-gradient-to-r from-amber-500/20 via-orange-500/15 to-amber-500/20 border-2 border-amber-500/40 rounded-2xl p-4 mb-6 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-lg">
+            <div className="flex items-center gap-3">
+              <span className="p-2.5 rounded-xl bg-amber-500 text-white font-bold flex items-center justify-center shadow">
+                <Sparkles className="w-5 h-5" />
+              </span>
+              <div>
+                <div className="text-xs sm:text-sm font-extrabold text-amber-700 dark:text-amber-400">
+                  ⚡ Interactive Free Trial Sandbox Mode
+                </div>
+                <p className="text-[11px] text-[var(--text-muted)]">
+                  You are exploring pre-loaded sample data (50 staff). Biometric device push and CSV uploads are locked in preview mode.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <button
+                type="button"
+                onClick={handleExitDemo}
+                className="px-3.5 py-2 rounded-xl border border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 text-amber-900 dark:text-amber-200 font-bold text-xs transition-colors flex items-center gap-1.5 shadow-sm"
+              >
+                <Home className="w-3.5 h-3.5" />
+                <span>Exit Demo &amp; Return Home</span>
+              </button>
+              <a
+                href="/signup"
+                className="px-4 py-2 rounded-xl bg-[var(--accent)] text-white font-bold text-xs hover:opacity-90 transition-opacity flex-shrink-0 shadow-md"
+              >
+                Upgrade to Live Plan →
+              </a>
+            </div>
+          </div>
+        )}
+
         {appState === 'loading' && (
           <div className="py-4">
             <DashboardSkeleton />
@@ -1377,7 +1437,29 @@ export default function HRDashboard() {
                 </button>
               </div>
               <div className="scroll-thin px-5 py-4 overflow-y-auto">
-                {appState === 'upload' && <UploadZone onFiles={handleFiles} />}
+                {appState === 'upload' && (
+                  isDemo ? (
+                    <div className="p-8 text-center space-y-4 bg-amber-500/10 border-2 border-dashed border-amber-500/30 rounded-2xl">
+                      <div className="w-12 h-12 rounded-2xl bg-amber-500 text-white flex items-center justify-center mx-auto shadow-md">
+                        <Lock className="w-6 h-6" />
+                      </div>
+                      <div className="space-y-1">
+                        <h4 className="text-sm font-bold text-[var(--text-primary)]">CSV Upload Locked in Free Trial</h4>
+                        <p className="text-xs text-[var(--text-muted)] max-w-sm mx-auto">
+                          Trial accounts are restricted to pre-loaded sample data. Upgrade to a live subscription to upload your company&apos;s biometric punch files.
+                        </p>
+                      </div>
+                      <a
+                        href="/signup"
+                        className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[var(--accent)] text-white text-xs font-bold hover:opacity-90 shadow-md"
+                      >
+                        Upgrade to Live Plan →
+                      </a>
+                    </div>
+                  ) : (
+                    <UploadZone onFiles={handleFiles} />
+                  )
+                )}
                 {appState === 'mapping' && mappingQueue.length > 0 && (
                   <ColumnMappingScreen
                     officeCode={mappingQueue[0].officeCode}
@@ -1508,6 +1590,37 @@ export default function HRDashboard() {
             setAppState(uploadedMonths.length > 0 ? 'dashboard' : 'upload');
           }}
         />
+      )}
+
+      {/* ── Demo Sandbox Upgrade Dialog ─────────────────────────────────── */}
+      {showDemoUpgradeModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-[#111827] border border-[var(--border)] rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4">
+            <div className="flex items-center gap-2.5 text-amber-500">
+              <Lock className="w-6 h-6 flex-shrink-0" />
+              <h3 className="font-bold text-base text-[var(--text-primary)]">CSV Upload Locked in Sandbox</h3>
+            </div>
+            <p className="text-xs text-[var(--text-muted)] leading-relaxed">
+              You are currently test-driving StaffPulse in read-only sandbox mode with 50 pre-loaded dummy employees. 
+              To upload and parse your company&apos;s real biometric time-clock files, please upgrade to a live subscription.
+            </p>
+            <div className="pt-2 flex items-center justify-end gap-2 border-t border-[var(--border)]">
+              <button
+                type="button"
+                onClick={() => setShowDemoUpgradeModal(false)}
+                className="px-3 py-1.5 rounded-xl text-xs font-medium border border-[var(--border)] hover:bg-[var(--bg-elevated)]"
+              >
+                Close
+              </button>
+              <a
+                href="/signup"
+                className="px-4 py-2 rounded-xl text-xs font-bold bg-[var(--accent)] text-white hover:opacity-90 shadow-md"
+              >
+                Upgrade to Live Plan →
+              </a>
+            </div>
+          </div>
+        </div>
       )}
     </DashboardShell>
   );

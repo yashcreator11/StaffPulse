@@ -32,6 +32,8 @@ const supabase = createClient(supabaseUrl, serviceKey, {
 });
 
 const DEFAULT_ORG_ID = '00000000-0000-0000-0000-000000000001';
+const STARTER_DEMO_ORG_ID = '00000000-0000-0000-0000-000000000002';
+const PRO_DEMO_ORG_ID = '00000000-0000-0000-0000-000000000003';
 const TEST_PASSWORD = 'Password@123';
 
 const TEST_USERS = [
@@ -70,6 +72,36 @@ const TEST_USERS = [
     department: 'Engineering',
     office: 'MUM',
     job_title: 'Software Developer',
+  },
+  {
+    role: 'hr_super_admin',
+    employee_code: 'DEMO_STARTER',
+    full_name: 'Starter Plan Demo Admin',
+    email: 'demo.starter@staffpulse.io',
+    department: 'Operations',
+    office: 'MUM',
+    job_title: 'Demo HR Admin (Starter)',
+    customOrgId: STARTER_DEMO_ORG_ID,
+  },
+  {
+    role: 'hr_super_admin',
+    employee_code: 'DEMO_PRO',
+    full_name: 'Pro Growth Plan Demo Admin',
+    email: 'demo.pro@staffpulse.io',
+    department: 'People Operations',
+    office: 'MUM',
+    job_title: 'Demo HR Admin (Pro Growth)',
+    customOrgId: PRO_DEMO_ORG_ID,
+  },
+  {
+    role: 'hr_super_admin',
+    employee_code: 'DEMO_ENT',
+    full_name: 'Enterprise Plan Demo Admin',
+    email: 'demo.enterprise@staffpulse.io',
+    department: 'Executive HR',
+    office: 'MUM',
+    job_title: 'Demo HR Director (Enterprise)',
+    customOrgId: DEFAULT_ORG_ID,
   },
 ];
 
@@ -110,20 +142,72 @@ async function getOrCreateAuthUser(email, password, fullName) {
 async function main() {
   console.log('Seeding test users for local testing...\n');
 
-  // 1. Ensure WonderBiz organization exists
+  // 1. Ensure all 3 Plan Demo Organizations exist
   await supabase.from('organizations').upsert(
-    {
-      id: DEFAULT_ORG_ID,
-      name: 'WonderBiz',
-      slug: 'wonderbiz',
-      plan: 'plan3',
-      status: 'active',
-      timezone: 'Asia/Kolkata',
-      settings: {
-        allowed_domains: ['wonderbiz.in', 'example.com', 'staffpulse.io'],
+    [
+      {
+        id: DEFAULT_ORG_ID,
+        name: 'WonderBiz (Enterprise)',
+        slug: 'wonderbiz',
+        plan: 'plan3',
+        status: 'active',
+        timezone: 'Asia/Kolkata',
+        settings: { allowed_domains: ['wonderbiz.in', 'example.com', 'staffpulse.io'] },
       },
-    },
+      {
+        id: STARTER_DEMO_ORG_ID,
+        name: 'StaffPulse Starter Demo',
+        slug: 'demo-starter',
+        plan: 'plan1',
+        status: 'active',
+        timezone: 'Asia/Kolkata',
+        settings: { allowed_domains: ['staffpulse.io'] },
+      },
+      {
+        id: PRO_DEMO_ORG_ID,
+        name: 'StaffPulse Pro Growth Demo',
+        slug: 'demo-pro',
+        plan: 'plan2',
+        status: 'active',
+        timezone: 'Asia/Kolkata',
+        settings: { allowed_domains: ['staffpulse.io'] },
+      },
+    ],
     { onConflict: 'id' }
+  );
+
+  // 1b. Seed Subscriptions Table for each plan
+  await supabase.from('subscriptions').upsert(
+    [
+      {
+        org_id: DEFAULT_ORG_ID,
+        plan_tier: 'enterprise',
+        billing_cycle: 'annual',
+        seat_limit: 500,
+        price_per_seat: 120,
+        currency: 'INR',
+        status: 'active',
+      },
+      {
+        org_id: STARTER_DEMO_ORG_ID,
+        plan_tier: 'starter',
+        billing_cycle: 'monthly',
+        seat_limit: 50,
+        price_per_seat: 49,
+        currency: 'INR',
+        status: 'active',
+      },
+      {
+        org_id: PRO_DEMO_ORG_ID,
+        plan_tier: 'pro',
+        billing_cycle: 'annual',
+        seat_limit: 150,
+        price_per_seat: 89,
+        currency: 'INR',
+        status: 'active',
+      },
+    ],
+    { onConflict: 'org_id' }
   );
 
   // 2. Ensure MUM and HYD offices exist
@@ -131,6 +215,8 @@ async function main() {
     [
       { code: 'MUM', name: 'Mumbai HQ', org_id: DEFAULT_ORG_ID },
       { code: 'HYD', name: 'Hyderabad Office', org_id: DEFAULT_ORG_ID },
+      { code: 'MUM_STARTER', name: 'Mumbai Office', org_id: STARTER_DEMO_ORG_ID },
+      { code: 'MUM_PRO', name: 'Mumbai Office', org_id: PRO_DEMO_ORG_ID },
     ],
     { onConflict: 'code' }
   );
@@ -156,9 +242,10 @@ async function main() {
 
   for (const u of TEST_USERS) {
     const authId = await getOrCreateAuthUser(u.email, TEST_PASSWORD, u.full_name);
+    const targetOrgId = u.customOrgId || DEFAULT_ORG_ID;
 
     const empPayload = {
-      org_id: DEFAULT_ORG_ID,
+      org_id: targetOrgId,
       auth_user_id: authId,
       employee_code: u.employee_code,
       full_name: u.full_name,
@@ -177,7 +264,7 @@ async function main() {
 
     const { data: upsertedEmp, error: empErr } = await supabase
       .from('employees')
-      .upsert(empPayload, { onConflict: 'org_id,employee_code' })
+      .upsert(empPayload, { onConflict: 'auth_user_id' })
       .select('id')
       .single();
 
