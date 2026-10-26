@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { logAuditEvent } from '@/lib/compliance/auditService';
 import { parseAdmsPunches, normalizeTimestamp, UniversalPunch } from '@/lib/biometrics/deviceService';
+import { checkRateLimit, getClientIp } from '@/lib/security/rateLimiter';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://127.0.0.1:34321';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -34,6 +35,12 @@ function extractToken(req: NextRequest): string | null {
  * Devices periodically ping this GET endpoint to sync time and verify server liveness.
  */
 export async function GET(req: NextRequest) {
+  const ip = getClientIp(req);
+  const rl = checkRateLimit(`push_get:${ip}`, 120, 60);
+  if (!rl.allowed) {
+    return new NextResponse('Too Many Requests', { status: 429 });
+  }
+
   const { searchParams } = new URL(req.url);
   const sn = searchParams.get('SN') || searchParams.get('device_sn') || searchParams.get('sn') || 'UNKNOWN';
   const token = extractToken(req);
@@ -74,6 +81,15 @@ export async function GET(req: NextRequest) {
  * Accepts punches pushed automatically by eSSL, ZKTeco, Matrix COSEC, or local sync agents.
  */
 export async function POST(req: NextRequest) {
+  const ip = getClientIp(req);
+  const rl = checkRateLimit(`push_post:${ip}`, 60, 60);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: `Too many push requests. Please wait ${rl.resetSeconds}s.` },
+      { status: 429 }
+    );
+  }
+
   const { searchParams } = new URL(req.url);
   const sn = searchParams.get('SN') || searchParams.get('device_sn') || searchParams.get('sn') || 'PUSH_DEVICE';
   const token = extractToken(req);
@@ -83,12 +99,12 @@ export async function POST(req: NextRequest) {
 
   // 1. Authenticate hardware / agent
   let targetOrgId: string | null = null;
-  let matchedDevice: { id: string; org_id: string; total_punches_ingested: number } | null = null;
+  let matchedDevice: { id: string; org_id: string; total_punches_ingested: number; ip_address?: string | null } | null = null;
 
   if (token) {
     const { data: dev } = await supabase
       .from('registered_devices')
-      .select('id, org_id, total_punches_ingested')
+      .select('id, org_id, total_punches_ingested, ip_address')
       .eq('api_token', token)
       .maybeSingle();
     if (dev) {
@@ -101,7 +117,7 @@ export async function POST(req: NextRequest) {
   if (!targetOrgId && sn !== 'PUSH_DEVICE') {
     const { data: dev } = await supabase
       .from('registered_devices')
-      .select('id, org_id, total_punches_ingested')
+      .select('id, org_id, total_punches_ingested, ip_address')
       .eq('device_serial', sn)
       .maybeSingle();
     if (dev) {
@@ -123,6 +139,16 @@ export async function POST(req: NextRequest) {
         hint: 'Register this biometric device under /leave/admin/devices and configure the Push URL with your secret token.',
       },
       { status: 401 }
+    );
+  }
+
+  // 1b. Verify IP Whitelist if configured on device
+  if (matchedDevice?.ip_address && matchedDevice.ip_address.trim() && matchedDevice.ip_address !== ip) {
+    return NextResponse.json(
+      {
+        error: `Forbidden: Push from IP ${ip} rejected. Device is restricted to gateway ${matchedDevice.ip_address}.`,
+      },
+      { status: 403 }
     );
   }
 

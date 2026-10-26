@@ -94,3 +94,43 @@ export function isSuspiciousSpreadsheetCell(value: unknown): boolean {
   if (typeof value !== 'string') return false;
   return /^[=+\-@\t\r]/.test(value.trim());
 }
+
+/**
+ * Server-side buffer verification: detects binary executables disguised as CSV
+ * (e.g. Windows PE executables starting with 'MZ', ELF binaries, or null byte injections)
+ */
+export function validateFileBuffer(
+  buffer: Uint8Array | ArrayBuffer,
+  fileName: string
+): { valid: boolean; error?: string } {
+  const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
+
+  if (bytes.length > MAX_SIZE_BYTES) {
+    return { valid: false, error: 'File size exceeds maximum allowed 5 MB.' };
+  }
+
+  if (bytes.length === 0) {
+    return { valid: false, error: 'Uploaded file is empty.' };
+  }
+
+  // Check magic bytes:
+  // Windows executable (MZ) = 0x4D, 0x5A
+  if (bytes[0] === 0x4D && bytes[1] === 0x5A) {
+    return { valid: false, error: 'Security violation: Disguised binary executable detected.' };
+  }
+
+  // Linux ELF = 0x7F, 0x45, 0x4C, 0x46
+  if (bytes[0] === 0x7F && bytes[1] === 0x45 && bytes[2] === 0x4C && bytes[3] === 0x46) {
+    return { valid: false, error: 'Security violation: Disguised Linux executable detected.' };
+  }
+
+  // Check first 1024 bytes for null byte injection (typical in binary files)
+  const sampleLength = Math.min(bytes.length, 1024);
+  for (let i = 0; i < sampleLength; i++) {
+    if (bytes[i] === 0x00) {
+      return { valid: false, error: 'Security violation: Binary or null byte content detected in text file.' };
+    }
+  }
+
+  return { valid: true };
+}

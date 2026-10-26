@@ -1,9 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { validatePasswordStrength } from '@/lib/authPolicy';
+import { checkRateLimit, getClientIp } from '@/lib/security/rateLimiter';
 
 export async function POST(req: NextRequest) {
   try {
+    const ip = getClientIp(req);
+    const rl = checkRateLimit(`signup:${ip}`, 10, 900);
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { error: `Too many registration attempts. Please try again in ${rl.resetSeconds} seconds.` },
+        { status: 429 }
+      );
+    }
+
     const body = await req.json().catch(() => null);
     if (!body) {
       return NextResponse.json({ error: 'Invalid JSON request' }, { status: 400 });

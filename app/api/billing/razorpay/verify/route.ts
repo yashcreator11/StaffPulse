@@ -135,9 +135,18 @@ export async function POST(req: NextRequest) {
     },
   });
 
+  // 4. Fetch org details to return dedicated slug
+  const { data: orgRecord } = await supabase
+    .from('organizations')
+    .select('id, name, slug')
+    .eq('id', orgId)
+    .maybeSingle();
+
   return NextResponse.json({
     success: true,
     message: 'Subscription payment verified and workspace upgraded successfully.',
+    orgSlug: orgRecord?.slug,
+    orgName: orgRecord?.name,
     invoice: {
       invoiceNumber,
       amount: totalAmount,

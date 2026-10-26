@@ -1,10 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { validateCoupon } from '@/lib/billing/couponService';
+import { checkRateLimit, getClientIp } from '@/lib/security/rateLimiter';
 
 // POST /api/billing/coupons/validate
 // Validates a coupon code during checkout and computes discount
 export async function POST(req: NextRequest) {
   try {
+    const ip = getClientIp(req);
+    const rl = checkRateLimit(`coupon_validate:${ip}`, 10, 60);
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { error: `Too many coupon attempts. Please try again in ${rl.resetSeconds} seconds.` },
+        { status: 429 }
+      );
+    }
+
     const body = await req.json().catch(() => ({}));
     const { code, planId, subtotal } = body;
 

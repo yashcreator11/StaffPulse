@@ -57,6 +57,7 @@ export async function POST(req: NextRequest) {
   const deviceSerial = String(body.device_serial || '').trim();
   const vendor: DeviceVendor = body.vendor || 'essl_zkteco';
   const officeCode = body.office_code || body.office_id || null;
+  const ipAddress = body.ip_address ? String(body.ip_address).trim() : null;
   const notes = body.notes ? String(body.notes).trim() : null;
 
   if (!deviceName || !deviceSerial) {
@@ -75,6 +76,7 @@ export async function POST(req: NextRequest) {
       vendor,
       office_code: officeCode,
       api_token: apiToken,
+      ip_address: ipAddress,
       status: 'pending',
       notes,
     })

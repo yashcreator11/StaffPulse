@@ -67,8 +67,9 @@ export async function proxy(req: NextRequest) {
   const isHealthApi = pathname.startsWith('/api/health');
   const isDemoApi = pathname.startsWith('/api/demo');
   const isCheckoutRoute = pathname.startsWith('/checkout') || pathname.startsWith('/api/billing');
+  const isSlugPortal = /^\/[a-zA-Z0-9_-]+$/.test(pathname) && !['/login', '/signup', '/setup', '/checkout', '/master', '/leave', '/api', '/terms', '/privacy'].some(prefix => pathname === prefix || pathname.startsWith(prefix + '/'));
 
-  if (isPublicLanding || isSharedView || isSharedLinkApi || isLoginPage || isSignupPage || isSetupPage || isAuthApi || isHealthApi || isDemoApi || isCheckoutRoute) {
+  if (isPublicLanding || isSharedView || isSharedLinkApi || isLoginPage || isSignupPage || isSetupPage || isAuthApi || isHealthApi || isDemoApi || isCheckoutRoute || isSlugPortal) {
     const { response } = await updateSession(req);
     return response;
   }

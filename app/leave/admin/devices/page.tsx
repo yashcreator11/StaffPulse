@@ -41,6 +41,7 @@ interface Device {
   office_id: string | null;
   offices?: Office | null;
   api_token: string;
+  ip_address?: string | null;
   status: 'online' | 'offline' | 'pending';
   last_heartbeat_at: string | null;
   last_punch_at: string | null;
@@ -74,6 +75,7 @@ export default function BiometricDevicesPage() {
   const [newDeviceSerial, setNewDeviceSerial] = useState('');
   const [newVendor, setNewVendor] = useState<'essl_zkteco' | 'realtime_biomax' | 'matrix' | 'hikvision' | 'sync_agent_legacy' | 'other'>('essl_zkteco');
   const [newOfficeId, setNewOfficeId] = useState('');
+  const [newIpAddress, setNewIpAddress] = useState('');
   const [newNotes, setNewNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -135,6 +137,7 @@ export default function BiometricDevicesPage() {
           device_serial: newDeviceSerial,
           vendor: newVendor,
           office_id: newOfficeId || null,
+          ip_address: newIpAddress.trim() || null,
           notes: newNotes || null,
         }),
       });
@@ -149,6 +152,7 @@ export default function BiometricDevicesPage() {
       setShowAddModal(false);
       setNewDeviceName('');
       setNewDeviceSerial('');
+      setNewIpAddress('');
       setNewNotes('');
 
       // Auto-open setup guide for this device
@@ -377,6 +381,12 @@ export default function BiometricDevicesPage() {
                         <div className="text-[11px] text-muted-foreground font-mono mt-0.5">
                           SN: {device.device_serial}
                         </div>
+                        {device.ip_address && (
+                          <div className="text-[10px] text-blue-500 font-mono mt-0.5 flex items-center gap-1">
+                            <Lock className="w-2.5 h-2.5" />
+                            <span>IP Whitelist: {device.ip_address}</span>
+                          </div>
+                        )}
                       </td>
 
                       <td className="py-3.5 px-4">
@@ -537,6 +547,22 @@ export default function BiometricDevicesPage() {
                     <option value="other">Universal HTTP Hardware</option>
                   </select>
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-foreground mb-1">
+                  Static IP / Gateway Whitelist (Optional)
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. 192.168.1.100 or 203.0.113.45"
+                  value={newIpAddress}
+                  onChange={(e) => setNewIpAddress(e.target.value)}
+                  className="w-full text-xs px-3 py-2 rounded-lg bg-surface border border-border text-foreground font-mono focus:outline-none focus:ring-1 focus:ring-accent"
+                />
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  Hardware IP gateway whitelisting: biometric push requests from any other IP address will be rejected.
+                </p>
               </div>
 
               <div>

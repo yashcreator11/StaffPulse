@@ -5,6 +5,7 @@ import { getLateMinutes, getEarlyMinutes, computeProductivityLostMinutes, target
 import { DEFAULT_THRESHOLDS } from './settings';
 import { effectiveMinutes, actualMinutes } from './hoursCalc';
 import { leaveLabelFor, UNMARKED_LEAVE_LABEL } from './leaveLabels';
+import { sanitizeCsvRows } from './security/sanitizeCsv';
 
 function buildLeaveLookup(leaveRecords: LeaveRecord[] = []): Map<string, LeaveRecord> {
   const m = new Map<string, LeaveRecord>();
@@ -129,7 +130,7 @@ export async function exportExcel(
     { Metric: 'Total Early Exits', Value: earlyRecords.length },
     { Metric: 'Total On Leave Days', Value: absentCount },
   ];
-  const ws1 = XLSX.utils.json_to_sheet(execSummaryRows);
+  const ws1 = XLSX.utils.json_to_sheet(sanitizeCsvRows(execSummaryRows));
   applyHeaderStyle(ws1);
   ws1['!cols'] = [{ wch: 28 }, { wch: 22 }];
   XLSX.utils.book_append_sheet(wb, ws1, 'Executive Summary');
@@ -163,7 +164,7 @@ export async function exportExcel(
   }
   disciplineRows.sort((a, b) => b['Late Count'] + b['Early Exit Count'] - (a['Late Count'] + a['Early Exit Count']));
   const ws2 = disciplineRows.length > 0
-    ? XLSX.utils.json_to_sheet(disciplineRows)
+    ? XLSX.utils.json_to_sheet(sanitizeCsvRows(disciplineRows))
     : XLSX.utils.json_to_sheet([{ Note: 'No discipline issues found for this period.' }]);
   applyHeaderStyle(ws2);
   if (disciplineRows.length > 0) autoColWidths(ws2, Object.keys(disciplineRows[0]));
@@ -229,7 +230,7 @@ export async function exportExcel(
       Status: colorStatus(rate),
     };
   }).sort((a, b) => parseFloat(a['Attendance %']) - parseFloat(b['Attendance %']));
-  const ws3 = XLSX.utils.json_to_sheet(deptRows);
+  const ws3 = XLSX.utils.json_to_sheet(sanitizeCsvRows(deptRows));
   applyHeaderStyle(ws3);
   autoColWidths(ws3, Object.keys(deptRows[0] || {}));
   XLSX.utils.book_append_sheet(wb, ws3, 'Department Summary');
@@ -258,7 +259,7 @@ export async function exportExcel(
       Status: colorStatus(rate),
     };
   }).sort((a, b) => parseFloat(a['Attendance %']) - parseFloat(b['Attendance %']));
-  const ws4 = XLSX.utils.json_to_sheet(empSummaryRows);
+  const ws4 = XLSX.utils.json_to_sheet(sanitizeCsvRows(empSummaryRows));
   applyHeaderStyle(ws4);
   autoColWidths(ws4, Object.keys(empSummaryRows[0] || {}));
   XLSX.utils.book_append_sheet(wb, ws4, 'Employee Summary');
@@ -295,7 +296,7 @@ export async function exportExcel(
       Flags: flags.join(', '),
     };
   });
-  const ws5 = XLSX.utils.json_to_sheet(detailRows);
+  const ws5 = XLSX.utils.json_to_sheet(sanitizeCsvRows(detailRows));
   applyHeaderStyle(ws5);
   autoColWidths(ws5, Object.keys(detailRows[0] || {}));
   XLSX.utils.book_append_sheet(wb, ws5, 'Day-wise Detail');
@@ -336,7 +337,7 @@ export function exportCSV(
       Flags: flags.join(', '),
     };
   });
-  const csv = Papa.unparse(rows);
+  const csv = Papa.unparse(sanitizeCsvRows(rows));
   const bom = '\uFEFF';
   const blob = new Blob([bom + csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
@@ -355,7 +356,7 @@ export function exportCSV(
 // logic (flags, late/early computation) stays untouched, per the
 // "never rewrite existing working logic unnecessarily" constraint.
 export function exportRowsAsCSV(rows: Record<string, string | number | boolean>[], filename: string): void {
-  const csv = Papa.unparse(rows);
+  const csv = Papa.unparse(sanitizeCsvRows(rows));
   const bom = '\uFEFF';
   const blob = new Blob([bom + csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
@@ -384,7 +385,7 @@ export async function exportRowsAsExcel(
     }
   };
   const wb = XLSX.utils.book_new();
-  const ws = XLSX.utils.json_to_sheet(rows);
+  const ws = XLSX.utils.json_to_sheet(sanitizeCsvRows(rows));
   applyHdrStyle(ws);
   if (rows.length > 0) {
     autoColWidths(ws, Object.keys(rows[0]));

@@ -12,6 +12,9 @@ import {
   Tag,
   X,
   Zap,
+  Copy,
+  Check,
+  Globe,
 } from 'lucide-react';
 import Link from 'next/link';
 import { computeQuote, SAAS_PLANS, PlanId, Cadence } from '@/lib/billing/razorpayService';
@@ -41,16 +44,20 @@ function CheckoutContent() {
   const [couponLoading, setCouponLoading] = useState(false);
   const [couponError, setCouponError] = useState<string | null>(null);
 
+  const [copiedLink, setCopiedLink] = useState(false);
   const [successData, setSuccessData] = useState<{
     invoiceNumber: string;
     planName: string;
     totalAmount: number;
+    orgSlug?: string;
+    orgName?: string;
   } | null>(null);
 
   const [currentOrg, setCurrentOrg] = useState<{
     id: string;
     name: string;
     status: string;
+    slug?: string;
   } | null>(null);
 
   useEffect(() => {
@@ -62,12 +69,12 @@ function CheckoutContent() {
 
       const { data: employee } = await supabase
         .from('employees')
-        .select('org_id, organizations(id, name, status)')
+        .select('org_id, organizations(id, name, status, slug)')
         .eq('auth_user_id', user.id)
         .maybeSingle();
 
       if (employee?.organizations) {
-        const org = employee.organizations as unknown as { id: string; name: string; status: string };
+        const org = employee.organizations as unknown as { id: string; name: string; status: string; slug?: string };
         setCurrentOrg(org);
       }
     }
@@ -190,6 +197,8 @@ function CheckoutContent() {
         invoiceNumber: result.invoice?.invoiceNumber || `INV-${new Date().getFullYear()}-001`,
         planName: planInfo.name,
         totalAmount: grandTotal,
+        orgSlug: result.orgSlug || currentOrg?.slug,
+        orgName: result.orgName || currentOrg?.name,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred during checkout');
@@ -200,6 +209,17 @@ function CheckoutContent() {
 
   // If payment succeeded, show confirmation screen
   if (successData) {
+    const portalSlug = successData.orgSlug || currentOrg?.slug || '';
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    const portalUrl = portalSlug ? `${origin}/${portalSlug}` : '';
+
+    const handleCopyPortalLink = () => {
+      if (!portalUrl) return;
+      navigator.clipboard.writeText(portalUrl);
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 2500);
+    };
+
     return (
       <div className="min-h-screen bg-[var(--bg-surface)] flex items-center justify-center p-4">
         <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-3xl p-8 max-w-lg w-full text-center shadow-2xl space-y-6">
@@ -235,9 +255,42 @@ function CheckoutContent() {
             </div>
           </div>
 
+          {/* Dedicated Company URL Box */}
+          {portalUrl && (
+            <div className="bg-blue-500/5 border border-blue-500/20 rounded-2xl p-4 text-left space-y-3">
+              <div className="flex items-center gap-2">
+                <Globe className="w-4 h-4 text-blue-500 shrink-0" />
+                <span className="text-xs font-bold text-[var(--text-primary)]">Your Dedicated Staff Portal URL</span>
+              </div>
+              <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">
+                Share this dedicated link with your staff. They can bookmark it directly to punch in and submit leave requests without having to browse the main website.
+              </p>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  readOnly
+                  value={portalUrl}
+                  className="flex-1 bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl px-3 py-2 text-xs font-mono text-[var(--text-primary)] select-all"
+                />
+                <button
+                  type="button"
+                  onClick={handleCopyPortalLink}
+                  className={`px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 ${
+                    copiedLink
+                      ? 'bg-emerald-600 text-white'
+                      : 'bg-blue-600 hover:bg-blue-500 text-white shadow-md'
+                  }`}
+                >
+                  {copiedLink ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copiedLink ? 'Copied!' : 'Copy'}</span>
+                </button>
+              </div>
+            </div>
+          )}
+
           <button
             onClick={() => {
-              router.push('/');
+              router.push(portalSlug ? `/${portalSlug}` : '/');
               router.refresh();
             }}
             className="w-full py-3.5 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-sm rounded-xl shadow-lg flex items-center justify-center gap-2 transition-all"
